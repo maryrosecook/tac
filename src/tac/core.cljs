@@ -9,15 +9,26 @@
 (def screen (.getContext (.getElementById js/document "screen") "2d"))
 (def width (aget screen "canvas" "width"))
 (def height (aget screen "canvas" "height"))
-(def key-state (atom {:left false :right false :up false :down false}))
+(def window (dom/getWindow))
+(def key-state (atom {:left nil :right nil :up nil :down nil}))
 (def grid 5)
 
+(defn latest-key [key-state]
+  (if (not (empty? key-state))
+    (ffirst (reverse (sort-by val key-state)))))
+
 (defn move-player [state]
-  (-> state
-      ((fn [state] (if (get @key-state :left) (update-in state [:player :x] #(- % grid)) state)))
-      ((fn [state] (if (get @key-state :right) (update-in state [:player :x] #(+ % grid)) state)))
-      ((fn [state] (if (get @key-state :up) (update-in state [:player :y] #(- % grid)) state)))
-      ((fn [state] (if (get @key-state :down) (update-in state [:player :y] #(+ % grid)) state)))))
+  (let [down-key-state (into {} (filter second @key-state))]
+    (-> state
+        ((fn [state]
+           (latest-key (select-keys down-key-state [:left :right]))
+           (if-let [direction (latest-key (select-keys down-key-state [:left :right]))]
+             (update-in state [:player :x] (if (= :left direction) #(- % grid) #(+ % grid)))
+             state)))
+        ((fn [state]
+           (if-let [direction (latest-key (select-keys down-key-state [:up :down]))]
+             (update-in state [:player :y] (if (= :up direction) #(- % grid) #(+ % grid)))
+             state))))))
 
 (defn step [state]
   (move-player state))
@@ -28,6 +39,7 @@
     (.fillRect screen (get player :x) (get player :y) 5 5)))
 
 (defn tick [state]
+  "Schedules next step and draw"
   (.requestAnimationFrame
    js/window
    (fn []
@@ -36,13 +48,18 @@
        (tick new-state)))))
 
 (defn keyboard-input-to-key-state []
-  (let [window (dom/getWindow)
-        key-code->key-id {37 :left 39 :right 38 :up 40 :down}
-        set-key (fn [state e]
-                  (if-let [key-id (get key-code->key-id (.-keyCode e))]
-                    (swap! key-state assoc key-id state)))]
-    (events/listen window (.-KEYDOWN events/EventType) (partial set-key true))
-    (events/listen window (.-KEYUP events/EventType) (partial set-key false))))
+  (let [event->key-id (fn [e] (get {37 :left 39 :right 38 :up 40 :down} (.-keyCode e)))]
+    (events/listen window
+                   (.-KEYDOWN events/EventType)
+                   (fn [e]
+                     (let [key-id (event->key-id e)]
+                       (if (and key-id (nil? (get @key-state key-id)))
+                         (swap! key-state assoc key-id (.getTime (js/Date.)))))))
+    (events/listen window
+                   (.-KEYUP events/EventType)
+                   (fn [e]
+                     (if-let [key-id (event->key-id e)]
+                       (swap! key-state assoc key-id nil))))))
 
 (keyboard-input-to-key-state)
 (tick {:player {:x 10 :y 30}})
