@@ -91,33 +91,30 @@
       (update :player (original-if-nil move-player))
       (update :crosshair (original-if-nil move-crosshair))))
 
-(defn draw-block [color block]
+(defn fill-block [color block]
   (set! (.-fillStyle screen) color)
   (.fillRect screen
              (* (:x block) grid) (* (:y block) grid)
              grid grid))
 
+(defn stroke-block [color block]
+  (set! (.-strokeStyle screen) color)
+  (.strokeRect screen
+               (+ (* (:x block) grid) 0.5) (+ (* (:y block) grid) 0.5)
+               (dec grid) (dec grid)))
+
 (defn draw [state]
   (.clearRect screen 0 0 (* width grid) (* height grid))
-  (let [player (get state :player)
-        crosshair (get state :crosshair)
+  (let [crosshair (get state :crosshair)
         blocks (get state :blocks)]
 
-    (set! (.-fillStyle screen) "black")
-    (.fillRect screen (* (get player :x) grid) (* (get player :y) grid) grid grid)
+    (dorun (map (partial fill-block "#999") blocks))
+    (let [los (line-of-sight (get state :player) crosshair (bodies state))]
+      (dorun (map (partial fill-block "rgba(255, 0, 0, 0.2)") los)))
 
-    (set! (.-fillStyle screen) "#999")
-    (doseq [block blocks] (.fillRect screen
-                                     (* grid (get block :x)) (* (get block :y) grid)
-                                     grid grid))
+    (fill-block "black" (get state :player))
 
-    (let [los (line-of-sight player crosshair (bodies state))]
-      (dorun (map (partial draw-block "rgba(255, 0, 0, 0.2)") los)))
-
-    (set! (.-strokeStyle screen) "red")
-    (.strokeRect screen
-                 (- (* (get crosshair :x) grid) 0.5) (- (* (get crosshair :y) grid) 0.5)
-                 (+ grid 1) (+ grid 1))))
+    (stroke-block "red" crosshair)))
 
 (defn tick [state]
   "Schedules next step and draw"
