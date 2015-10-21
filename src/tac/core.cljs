@@ -56,7 +56,7 @@
      (select-keys b [:x :y])))
 
 (defn bodies [state]
-  (conj (:blocks state) (:player state)))
+  (conj (:walls state) (:player state)))
 
 ;; stolen from github.com/jackschaedler/goya/blob/master/src/cljs/goya/components/bresenham.cljs
 (defn bresenham-line [{x0 :x y0 :y} {x1 :x y1 :y}]
@@ -87,7 +87,7 @@
                        )))))))))
 
 (defn line-of-sight [a b bodies]
-  (take-while (fn [block] (empty? (filter (partial colliding? block) bodies)))
+  (take-while (fn [body] (empty? (filter (partial colliding? body) bodies)))
               (rest (distinct (bresenham-line a b)))))
 
 (defn step [state]
@@ -110,9 +110,9 @@
 (defn draw [state]
   (.clearRect screen 0 0 (* width grid) (* height grid))
   (let [crosshair (:crosshair state)
-        blocks (:blocks state)]
+        walls (:walls state)]
 
-    (dorun (map (partial fill-block "#999") blocks))
+    (dorun (map (partial fill-block "#999") walls))
     (let [los (line-of-sight (:player state) crosshair (bodies state))]
       (dorun (map (partial fill-block "rgba(255, 0, 0, 0.2)") los)))
 
@@ -129,9 +129,9 @@
        (draw new-state)
        (tick new-state)))))
 
-(defn add-blocks [state width height]
+(defn add-walls [state width height]
   (let [priority-bodies [(:player state)]
-        blocks
+        walls
         (into [] (set
                   (mapcat
                    (fn [_]
@@ -141,9 +141,9 @@
                         {:x x :y (+ y 1)} {:x (+ x 1) :y (+ y 1)} {:x (+ x 2) :y (+ y 1)}
                         {:x x :y (+ y 2)} {:x (+ x 1) :y (+ y 2)} {:x (+ x 2) :y (+ y 2)}]))
                    (range 50))))
-        final-blocks
-        (filter (fn [block] (empty? (filter (partial colliding? block) priority-bodies))) blocks)]
-    (assoc state :blocks final-blocks)))
+        final-walls
+        (filter (fn [wall] (empty? (filter (partial colliding? wall) priority-bodies))) walls)]
+    (assoc state :walls final-walls)))
 
 (defn keyboard-input-to-key-state []
   (let [event->key-id (fn [e] (get {37 :left 39 :right 38 :up 40 :down 16 :shift}
@@ -164,4 +164,4 @@
 (tick
  (-> {:player {:x 5 :y 10 :last-move 0 :move-every 200}
       :crosshair {:x 3 :y 4 :last-move 0 :move-every 50}}
-     (add-blocks width height)))
+     (add-walls width height)))
