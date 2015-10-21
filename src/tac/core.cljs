@@ -49,16 +49,16 @@
     (move-player-controlled-object player)))
 
 (defn colliding? [a b]
-  (= (count (set [(select-keys a [:x :y])
-                  (select-keys b [:x :y])]))
-     1))
+  (= (select-keys a [:x :y])
+     (select-keys b [:x :y])))
 
 (defn bodies [state]
-  (conj (:bodies state) (:player state)))
+  (conj (:blocks state) (:player state)))
 
 ;; stolen from github.com/jackschaedler/goya/blob/master/src/cljs/goya/components/bresenham.cljs
 (defn bresenham-line [{x0 :x y0 :y} {x1 :x y1 :y}]
-  (let [len-x (js/Math.abs (- x1 x0))
+  (let [original-start {:x x0 :y y0}
+        len-x (js/Math.abs (- x1 x0))
         len-y (js/Math.abs (- y1 y0))
         is-steep (> len-y len-x)]
     (let [[x0 y0 x1 y1] (if is-steep [y0 x0 y1 x1] [x0 y0 x1 y1])]
@@ -71,7 +71,7 @@
                  error (js/Math.floor (/ delta-x 2))
                  pixels (if is-steep [{:x y :y x}] [{:x x :y y}])]
             (if (> x x1)
-              pixels
+              (do (if (= (first pixels) original-start) pixels (reverse pixels)))
               (if (< error delta-y)
                 (recur (inc x)
                        (+ y y-step)
@@ -84,7 +84,8 @@
                        )))))))))
 
 (defn line-of-sight [a b bodies]
-  (bresenham-line a b))
+  (take-while (fn [block] (empty? (filter (partial colliding? block) bodies)))
+              (rest (distinct (bresenham-line a b)))))
 
 (defn step [state]
   (-> state
