@@ -28,7 +28,7 @@
 
 (defn move-player-controlled-object [obj]
   (let [down-key-state (into {} (filter second @key-state))
-        can-move (passed (get obj :last-move) (get obj :move-every))
+        can-move (passed (:last-move obj) (:move-every obj))
         moves
         (->> [(if-let [direction (latest-key (select-keys down-key-state [:left :right]))]
                 (fn [obj]
@@ -41,11 +41,11 @@
       (assoc (reduce #(%2 %1) obj moves) :last-move (now)))))
 
 (defn move-crosshair [crosshair]
-  (if (get @key-state :shift)
+  (if (:shift @key-state)
     (move-player-controlled-object crosshair)))
 
 (defn move-player [player]
-  (if (not (get @key-state :shift))
+  (if (not (:shift @key-state))
     (move-player-controlled-object player)))
 
 (defn colliding? [a b]
@@ -105,14 +105,14 @@
 
 (defn draw [state]
   (.clearRect screen 0 0 (* width grid) (* height grid))
-  (let [crosshair (get state :crosshair)
-        blocks (get state :blocks)]
+  (let [crosshair (:crosshair state)
+        blocks (:blocks state)]
 
     (dorun (map (partial fill-block "#999") blocks))
-    (let [los (line-of-sight (get state :player) crosshair (bodies state))]
+    (let [los (line-of-sight (:player state) crosshair (bodies state))]
       (dorun (map (partial fill-block "rgba(255, 0, 0, 0.2)") los)))
 
-    (fill-block "black" (get state :player))
+    (fill-block "black" (:player state))
 
     (stroke-block "red" crosshair)))
 
@@ -136,7 +136,7 @@
                    (.-KEYDOWN events/EventType)
                    (fn [e]
                      (let [key-id (event->key-id e)]
-                       (if (and key-id (nil? (get @key-state key-id)))
+                       (if (and key-id (nil? (key-id @key-state)))
                          (swap! key-state assoc key-id (now))))))
     (events/listen window
                    (.-KEYUP events/EventType)
