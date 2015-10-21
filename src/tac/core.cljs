@@ -23,30 +23,33 @@
 (defn now []
   (.getTime (js/Date.)))
 
+(defn can-move [obj]
+  (passed (:last-move obj) (:move-every obj)))
+
 (defn original-if-nil [f]
   (fn [value] (or (f value) value)))
 
-(defn move-player-controlled-object [obj]
+(defn new-player-controlled-object-pos [obj]
   (let [down-key-state (into {} (filter second @key-state))
-        can-move (passed (:last-move obj) (:move-every obj))
         moves
-        (->> [(if-let [direction (latest-key (select-keys down-key-state [:left :right]))]
-                (fn [obj]
-                  (update obj :x (if (= :left direction) #(- % 1) #(+ % 1)))))
-              (if-let [direction (latest-key (select-keys down-key-state [:up :down]))]
-                (fn [obj]
-                  (update obj :y (if (= :up direction) #(- % 1) #(+ % 1)))))]
-             (keep identity))]
-    (if (and can-move (not (empty? moves)))
-      (assoc (reduce #(%2 %1) obj moves) :last-move (now)))))
+        [(if-let [direction (latest-key (select-keys down-key-state [:left :right]))]
+           (fn [obj]
+             (update obj :x (if (= :left direction) #(- % 1) #(+ % 1)))))
+         (if-let [direction (latest-key (select-keys down-key-state [:up :down]))]
+           (fn [obj]
+             (update obj :y (if (= :up direction) #(- % 1) #(+ % 1)))))]]
+    (select-keys (reduce #(%2 %1) obj (keep identity moves))
+                 [:x :y])))
 
 (defn move-crosshair [crosshair]
-  (if (:shift @key-state)
-    (move-player-controlled-object crosshair)))
+  (let [new-pos (new-player-controlled-object-pos crosshair)]
+    (if (and (can-move crosshair) (:shift @key-state))
+      (merge crosshair new-pos {:last-move (now)}))))
 
 (defn move-player [player]
-  (if (not (:shift @key-state))
-    (move-player-controlled-object player)))
+  (let [new-pos (new-player-controlled-object-pos player)]
+    (if (and (can-move player) (not (:shift @key-state)))
+      (merge player new-pos {:last-move (now)}))))
 
 (defn colliding? [a b]
   (= (select-keys a [:x :y])
