@@ -129,9 +129,21 @@
        (draw new-state)
        (tick new-state)))))
 
-(defn generate-blocks [width height]
-  (into [] (set (map (fn [_] {:x (rand-int width) :y (rand-int height)})
-                     (range 100)))))
+(defn add-blocks [state width height]
+  (let [priority-bodies [(:player state)]
+        blocks
+        (into [] (set
+                  (mapcat
+                   (fn [_]
+                     (let [x (rand-int (- width 2))
+                           y (rand-int (- height 2))]
+                       [{:x x :y y} {:x (+ x 1) :y y} {:x (+ x 2) :y y}
+                        {:x x :y (+ y 1)} {:x (+ x 1) :y (+ y 1)} {:x (+ x 2) :y (+ y 1)}
+                        {:x x :y (+ y 2)} {:x (+ x 1) :y (+ y 2)} {:x (+ x 2) :y (+ y 2)}]))
+                   (range 50))))
+        final-blocks
+        (filter (fn [block] (empty? (filter (partial colliding? block) priority-bodies))) blocks)]
+    (assoc state :blocks final-blocks)))
 
 (defn keyboard-input-to-key-state []
   (let [event->key-id (fn [e] (get {37 :left 39 :right 38 :up 40 :down 16 :shift}
@@ -149,6 +161,7 @@
                        (swap! key-state assoc key-id nil))))))
 
 (keyboard-input-to-key-state)
-(tick {:player {:x 5 :y 10 :last-move 0 :move-every 200}
-       :crosshair {:x 3 :y 4 :last-move 0 :move-every 50}
-       :blocks (generate-blocks width height)})
+(tick
+ (-> {:player {:x 5 :y 10 :last-move 0 :move-every 200}
+      :crosshair {:x 3 :y 4 :last-move 0 :move-every 50}}
+     (add-blocks width height)))
