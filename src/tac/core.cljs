@@ -75,7 +75,7 @@
                  error (js/Math.floor (/ delta-x 2))
                  pixels (if is-steep [{:x y :y x}] [{:x x :y y}])]
             (if (> x x1)
-              (do (if (= (first pixels) original-start) pixels (reverse pixels)))
+              (distinct (if (= (first pixels) original-start) pixels (reverse pixels)))
               (if (< error delta-y)
                 (recur (inc x)
                        (+ y y-step)
@@ -89,7 +89,7 @@
 
 (defn line-of-sight [a b bodies]
   (take-while (fn [body] (empty? (filter (partial colliding? body) bodies)))
-              (rest (distinct (bresenham-line a b)))))
+              (rest (bresenham-line a b))))
 
 (defn step [state]
   (-> state
