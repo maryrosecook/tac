@@ -35,10 +35,10 @@
         moves
         [(if-let [direction (latest-key (select-keys down-key-state [:left :right]))]
            (fn [obj]
-             (update obj :x (if (= :left direction) #(- % 1) #(+ % 1)))))
+             (update obj :x (if (= :left direction) #(- % grid) #(+ % grid)))))
          (if-let [direction (latest-key (select-keys down-key-state [:up :down]))]
            (fn [obj]
-             (update obj :y (if (= :up direction) #(- % 1) #(+ % 1)))))]]
+             (update obj :y (if (= :up direction) #(- % grid) #(+ % grid)))))]]
     (select-keys (reduce #(%2 %1) obj (keep identity moves))
                  [:x :y])))
 
@@ -66,7 +66,7 @@
       (let [[x0 y0 x1 y1] (if (> x0 x1) [x1 y1 x0 y0] [x0 y0 x1 y1])]
         (let [delta-x (- x1 x0)
               delta-y (js/Math.abs (- y1 y0))
-              y-step (if (< y0 y1) 1 -1)]
+              y-step (if (< y0 y1) grid (- grid))]
           (loop [x x0
                  y y0
                  error (js/Math.floor (/ delta-x 2))
@@ -74,15 +74,14 @@
             (if (> x x1)
               (distinct (if (= (first pixels) original-start) pixels (reverse pixels)))
               (if (< error delta-y)
-                (recur (inc x)
+                (recur (+ x grid)
                        (+ y y-step)
                        (+ error (- delta-x delta-y))
                        (if is-steep (conj pixels {:x y :y x}) (conj pixels {:x x :y y})))
-                (recur (inc x)
+                (recur (+ x grid)
                        y
                        (- error delta-y)
-                       (if is-steep (conj pixels {:x y :y x}) (conj pixels {:x x :y y}))
-                       )))))))))
+                       (if is-steep (conj pixels {:x y :y x}) (conj pixels {:x x :y y})))))))))))
 
 (defn line-of-sight [a b bodies]
   (take-while (fn [body] (empty? (filter (partial colliding? body) bodies)))
@@ -95,16 +94,12 @@
 
 (defn fill-block [color block]
   (set! (.-fillStyle screen) color)
-  (.fillRect screen
-             (* (:x block) grid)
-             (* (:y block) grid)
-             grid
-             grid))
+  (.fillRect screen (:x block) (:y block) grid grid))
 
 (defn stroke-block [color block]
   (set! (.-strokeStyle screen) color)
   (.strokeRect screen
-               (+ (* (:x block) grid) 0.5) (+ (* (:y block) grid) 0.5)
+               (+ (:x block) 0.5) (+ (:y block) 0.5)
                (dec grid) (dec grid)))
 
 (defn draw [state]
@@ -133,8 +128,8 @@
        (tick new-state)))))
 
 (defn add-walls [state]
-  (assoc state :walls [{:x 7 :y 7}
-                       {:x 15 :y 15}]))
+  (assoc state :walls [{:x 70 :y 70} {:x 80 :y 70} {:x 70 :y 80} {:x 80 :y 80}
+                       {:x 150 :y 150} {:x 160 :y 150} {:x 150 :y 160} {:x 160 :y 160}]))
 
 (defn keyboard-input-to-key-state []
   (let [event->key-id (fn [e] (get {37 :left 39 :right 38 :up 40 :down 16 :shift}
@@ -153,6 +148,6 @@
 
 (keyboard-input-to-key-state)
 (tick
- (-> {:player {:x 5 :y 10 :last-move 0 :move-every 200}
-      :crosshair {:x 3 :y 4 :last-move 0 :move-every 50}}
+ (-> {:player {:x 50 :y 100 :last-move 0 :move-every 200}
+      :crosshair {:x 30 :y 40 :last-move 0 :move-every 50}}
      (add-walls)))
