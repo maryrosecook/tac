@@ -91,7 +91,7 @@
 (defn step [state]
   (-> state
       (update :player (original-if-nil move-player))
-      (update :crosshair (original-if-nil move-crosshair))))
+      (update-in [:player :crosshair] (original-if-nil move-crosshair))))
 
 (defn fill-block [color block]
   (set! (.-fillStyle screen) color)
@@ -107,7 +107,7 @@
   (set! (.-fillStyle screen) "black")
   (.fillRect screen 0 0 (* (:x screen-size) grid) (* (:y screen-size) grid))
   (let [player (:player state)
-        crosshair (:crosshair state)
+        crosshair (get-in state [:player :crosshair])
         walls (:walls state)]
 
     (dorun (map (partial fill-block "white") walls))
@@ -149,6 +149,6 @@
 
 (keyboard-input-to-key-state)
 (tick
- (-> {:player {:x 50 :y 100 :last-move 0 :move-every 200}
-      :crosshair {:x 30 :y 40 :last-move 0 :move-every 50}}
+ (-> {:player {:x 50 :y 100 :last-move 0 :move-every 200
+               :crosshair {:x 30 :y 40 :last-move 0 :move-every 50}}}
      (add-walls)))
