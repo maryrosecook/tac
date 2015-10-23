@@ -42,14 +42,17 @@
     (select-keys (reduce #(%2 %1) obj (keep identity moves))
                  [:x :y])))
 
+(defn pos [b]
+  (select-keys b [:x :y]))
+
 (defn move-crosshair [crosshair]
   (let [new-pos (new-player-controlled-object-pos crosshair)]
-    (if (and (can-move crosshair) (:shift @key-state))
+    (if (and (can-move crosshair) (:shift @key-state) (not= new-pos (pos crosshair)))
       (merge crosshair new-pos {:last-move (now)}))))
 
 (defn move-player [player]
   (let [new-pos (new-player-controlled-object-pos player)]
-    (if (and (can-move player) (not (:shift @key-state)))
+    (if (and (can-move player) (not (:shift @key-state)) (not= new-pos (pos player)))
       (merge player new-pos {:last-move (now)}))))
 
 (defn colliding? [b1 b2]
