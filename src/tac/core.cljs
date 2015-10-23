@@ -39,8 +39,7 @@
          (if-let [direction (latest-key (select-keys down-key-state [:up :down]))]
            (fn [obj]
              (update obj :y (if (= :up direction) #(- % grid) #(+ % grid)))))]]
-    (select-keys (reduce #(%2 %1) obj (keep identity moves))
-                 [:x :y])))
+    (pos (reduce #(%2 %1) obj (keep identity moves)))))
 
 (defn pos [b]
   (select-keys b [:x :y]))
@@ -56,8 +55,7 @@
       (merge player new-pos {:last-move (now)}))))
 
 (defn colliding? [b1 b2]
-  (= (select-keys b1 [:x :y])
-     (select-keys b2 [:x :y])))
+  (= (pos b1) (pos b2)))
 
 ;; stolen from github.com/jackschaedler/goya/blob/master/src/cljs/goya/components/bresenham.cljs
 (defn bresenham-line [{x0 :x y0 :y} {x1 :x y1 :y}]
