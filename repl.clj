@@ -1,6 +1,7 @@
 (require 'cljs.repl)
 (require 'cljs.build.api)
 (require 'cljs.repl.browser)
+(require 'clojure.set)
 
 (cljs.build.api/build
  "src"

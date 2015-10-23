@@ -1,5 +1,6 @@
 (ns tac.core
   (:require [clojure.browser.repl :as repl]
+            [clojure.set :as set]
             [goog.dom :as dom]
             [goog.events :as events]))
 
