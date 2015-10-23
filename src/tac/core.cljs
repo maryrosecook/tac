@@ -129,21 +129,9 @@
        (draw new-state)
        (tick new-state)))))
 
-(defn add-walls [state width height]
-  (let [priority-bodies [(:player state)]
-        walls
-        (into [] (set
-                  (mapcat
-                   (fn [_]
-                     (let [x (rand-int (- width 2))
-                           y (rand-int (- height 2))]
-                       [{:x x :y y} {:x (+ x 1) :y y} {:x (+ x 2) :y y}
-                        {:x x :y (+ y 1)} {:x (+ x 1) :y (+ y 1)} {:x (+ x 2) :y (+ y 1)}
-                        {:x x :y (+ y 2)} {:x (+ x 1) :y (+ y 2)} {:x (+ x 2) :y (+ y 2)}]))
-                   (range 50))))
-        final-walls
-        (filter (fn [wall] (empty? (filter (partial colliding? wall) priority-bodies))) walls)]
-    (assoc state :walls final-walls)))
+(defn add-walls [state]
+  (assoc state :walls [{:x 7 :y 7}
+                       {:x 15 :y 15}]))
 
 (defn keyboard-input-to-key-state []
   (let [event->key-id (fn [e] (get {37 :left 39 :right 38 :up 40 :down 16 :shift}
