@@ -9,8 +9,8 @@
 
 (def grid 10)
 (def screen (.getContext (.getElementById js/document "screen") "2d"))
-(def width (/ (aget screen "canvas" "width") grid))
-(def height (/ (aget screen "canvas" "height") grid))
+(def screen-size {:x (/ (aget screen "canvas" "width") grid)
+                  :y (/ (aget screen "canvas" "height") grid)})
 (def window (dom/getWindow))
 (def key-state (atom {:left nil :right nil :up nil :down nil}))
 
@@ -52,12 +52,9 @@
     (if (and (can-move player) (not (:shift @key-state)))
       (merge player new-pos {:last-move (now)}))))
 
-(defn colliding? [a b]
-  (= (select-keys a [:x :y])
-     (select-keys b [:x :y])))
-
-(defn bodies [state]
-  (conj (:walls state) (:player state)))
+(defn colliding? [b1 b2]
+  (= (select-keys b1 [:x :y])
+     (select-keys b2 [:x :y])))
 
 ;; stolen from github.com/jackschaedler/goya/blob/master/src/cljs/goya/components/bresenham.cljs
 (defn bresenham-line [{x0 :x y0 :y} {x1 :x y1 :y}]
@@ -99,8 +96,10 @@
 (defn fill-block [color block]
   (set! (.-fillStyle screen) color)
   (.fillRect screen
-             (* (:x block) grid) (* (:y block) grid)
-             grid grid))
+             (* (:x block) grid)
+             (* (:y block) grid)
+             grid
+             grid))
 
 (defn stroke-block [color block]
   (set! (.-strokeStyle screen) color)
@@ -109,15 +108,18 @@
                (dec grid) (dec grid)))
 
 (defn draw [state]
-  (.clearRect screen 0 0 (* width grid) (* height grid))
-  (let [crosshair (:crosshair state)
+  (set! (.-fillStyle screen) "black")
+  (.fillRect screen 0 0 (* (:x screen-size) grid) (* (:y screen-size) grid))
+  (let [player (:player state)
+        crosshair (:crosshair state)
         walls (:walls state)]
 
-    (dorun (map (partial fill-block "#999") walls))
-    (let [los (line-of-sight (:player state) crosshair (bodies state))]
-      (dorun (map (partial fill-block "rgba(255, 0, 0, 0.2)") los)))
+    (dorun (map (partial fill-block "white") walls))
 
-    (fill-block "black" (:player state))
+    (let [los (line-of-sight player crosshair walls)]
+      (dorun (map (partial fill-block "rgba(255, 0, 0, 0.5)") los)))
+
+    (fill-block "orange" player)
 
     (stroke-block "red" crosshair)))
 
@@ -153,4 +155,4 @@
 (tick
  (-> {:player {:x 5 :y 10 :last-move 0 :move-every 200}
       :crosshair {:x 3 :y 4 :last-move 0 :move-every 50}}
-     (add-walls width height)))
+     (add-walls)))
