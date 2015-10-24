@@ -7,6 +7,10 @@
 (defonce conn
   (repl/connect "http://localhost:9000/repl"))
 
+(def key-maps
+  {:player-1-dvorak {:left 65 :right 69 :up 188 :down 79 :aim 16 :switch 17}
+   :player-2-dvorak {:left 72 :right 78 :up 67 :down 84 :aim 18 :switch 16}})
+
 (def grid 10)
 (def screen (.getContext (.getElementById js/document "screen") "2d"))
 (def screen-size {:x (/ (aget screen "canvas" "width") grid)
@@ -27,11 +31,15 @@
 (defn can-move [obj]
   (passed (:last-move obj) (:move-every obj)))
 
-(defn original-if-nil [f]
-  (fn [value] (or (f value) value)))
+(defn pos [b]
+  (select-keys b [:x :y]))
 
-(defn new-player-controlled-object-pos [obj]
-  (let [down-key-state (into {} (filter second @key-state))
+(defn new-player-controlled-object-pos [obj action-to-key-code]
+  (let [key-code-to-action (set/map-invert action-to-key-code)
+        down-key-state (into {} (->> @key-state
+                                     (filter second)
+                                     (map #(assoc % 0 (get key-code-to-action (first %))))
+                                     (filter first)))
         moves
         [(if-let [direction (latest-key (select-keys down-key-state [:left :right]))]
            (fn [obj]
@@ -41,18 +49,25 @@
              (update obj :y (if (= :up direction) #(- % grid) #(+ % grid)))))]]
     (pos (reduce #(%2 %1) obj (keep identity moves)))))
 
-(defn pos [b]
-  (select-keys b [:x :y]))
+(defn move-crosshair [crosshair action-to-key-code]
+  (let [new-pos (new-player-controlled-object-pos crosshair action-to-key-code)]
+    (if (and (can-move crosshair)
+             (get @key-state (:aim action-to-key-code))
+             (not= new-pos (pos crosshair)))
+      (merge crosshair new-pos {:last-move (now)})
+      crosshair)))
 
-(defn move-crosshair [crosshair]
-  (let [new-pos (new-player-controlled-object-pos crosshair)]
-    (if (and (can-move crosshair) (:shift @key-state) (not= new-pos (pos crosshair)))
-      (merge crosshair new-pos {:last-move (now)}))))
+(defn move-player [player action-to-key-code]
+  (let [new-pos (new-player-controlled-object-pos player action-to-key-code)]
+    (if (and (can-move player)
+             (not (get @key-state (:aim action-to-key-code)))
+             (not= new-pos (pos player)))
+      (merge player new-pos {:last-move (now)})
+      player)))
 
-(defn move-player [player]
-  (let [new-pos (new-player-controlled-object-pos player)]
-    (if (and (can-move player) (not (:shift @key-state)) (not= new-pos (pos player)))
-      (merge player new-pos {:last-move (now)}))))
+(defn step-player [player]
+  (assoc (move-player player (:action-to-key-code player))
+    :crosshair (move-crosshair (:crosshair player) (:action-to-key-code player))))
 
 (defn colliding? [b1 b2]
   (= (pos b1) (pos b2)))
@@ -89,9 +104,7 @@
               (rest (bresenham-line a b))))
 
 (defn step [state]
-  (-> state
-      (update :player (original-if-nil move-player))
-      (update-in [:player :crosshair] (original-if-nil move-crosshair))))
+  (assoc state :players (map step-player (:players state))))
 
 (defn fill-block [color block]
   (set! (.-fillStyle screen) color)
@@ -101,23 +114,24 @@
   (set! (.-strokeStyle screen) color)
   (.strokeRect screen
                (+ (:x block) 0.5) (+ (:y block) 0.5)
-               (dec grid) (dec grid)))
+               (- grid 1) (- grid 1)))
 
 (defn draw [state]
   (set! (.-fillStyle screen) "black")
   (.fillRect screen 0 0 (* (:x screen-size) grid) (* (:y screen-size) grid))
-  (let [player (:player state)
+  (let [players (:player state)
         crosshair (get-in state [:player :crosshair])
         walls (:walls state)]
 
     (dorun (map (partial fill-block "white") walls))
 
-    (let [los (line-of-sight player crosshair walls)]
-      (dorun (map (partial fill-block "rgba(255, 0, 0, 0.5)") los)))
-
-    (fill-block "orange" player)
-
-    (stroke-block "red" crosshair)))
+    (dorun (map (fn [player]
+                  (let [crosshair (:crosshair player)
+                        los (line-of-sight player crosshair walls)]
+                    (fill-block (:color player) player)
+                    (dorun (map (partial fill-block (:color crosshair)) los))
+                    (stroke-block (:color player) crosshair)))
+                (:players state)))))
 
 (defn tick [state]
   "Schedules next step and draw"
@@ -133,22 +147,28 @@
                        {:x 150 :y 150} {:x 160 :y 150} {:x 150 :y 160} {:x 160 :y 160}]))
 
 (defn keyboard-input-to-key-state []
-  (let [event->key-id (fn [e] (get {37 :left 39 :right 38 :up 40 :down 16 :shift}
-                                   (.-keyCode e)))]
-    (events/listen window
-                   (.-KEYDOWN events/EventType)
-                   (fn [e]
-                     (let [key-id (event->key-id e)]
-                       (if (and key-id (nil? (key-id @key-state)))
-                         (swap! key-state assoc key-id (now))))))
-    (events/listen window
-                   (.-KEYUP events/EventType)
-                   (fn [e]
-                     (if-let [key-id (event->key-id e)]
-                       (swap! key-state assoc key-id nil))))))
+  (events/listen window
+                 (.-KEYUP events/EventType)
+                 (fn [e]
+                   (let [key-code (.-keyCode e)]
+                     (.log js/console (clj->js "up") key-code)
+                     (swap! key-state assoc key-code nil))))
+
+  (events/listen window
+                 (.-KEYDOWN events/EventType)
+                 (fn [e]
+                   (let [key-code (.-keyCode e)]
+                     (if (nil? (get @key-state key-code))
+                       (swap! key-state assoc key-code (now)))))))
 
 (keyboard-input-to-key-state)
 (tick
- (-> {:player {:x 50 :y 100 :last-move 0 :move-every 200
-               :crosshair {:x 30 :y 40 :last-move 0 :move-every 50}}}
+ (-> {:players [{:x 50 :y 50 :last-move 0 :move-every 200 :color "red"
+                 :action-to-key-code (:player-1-dvorak key-maps)
+                 :crosshair {:x 0 :y 0 :last-move 0 :move-every 50
+                             :color "rgba(255, 0, 0, 0.5)"}}
+                {:x 350 :y 350 :last-move 0 :move-every 200 :color "blue"
+                 :action-to-key-code (:player-2-dvorak key-maps)
+                 :crosshair {:x 390 :y 390 :last-move 0 :move-every 50
+                             :color "rgba(0, 0, 255, 0.5)"}}]}
      (add-walls)))
