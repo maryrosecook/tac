@@ -116,22 +116,21 @@
                (+ (:x block) 0.5) (+ (:y block) 0.5)
                (- grid 1) (- grid 1)))
 
+(defn draw-player [player walls]
+  (let [crosshair (:crosshair player)
+        los (line-of-sight player crosshair walls)]
+    (fill-block (:color player) player)
+    (dorun (map (partial fill-block (:color crosshair)) los))
+    (stroke-block (:color player) crosshair)))
+
 (defn draw [state]
   (set! (.-fillStyle screen) "black")
   (.fillRect screen 0 0 (* (:x screen-size) grid) (* (:y screen-size) grid))
   (let [players (:player state)
         crosshair (get-in state [:player :crosshair])
         walls (:walls state)]
-
     (dorun (map (partial fill-block "white") walls))
-
-    (dorun (map (fn [player]
-                  (let [crosshair (:crosshair player)
-                        los (line-of-sight player crosshair walls)]
-                    (fill-block (:color player) player)
-                    (dorun (map (partial fill-block (:color crosshair)) los))
-                    (stroke-block (:color player) crosshair)))
-                (:players state)))))
+    (dorun (map #(draw-player % walls) (:players state)))))
 
 (defn tick [state]
   "Schedules next step and draw"
