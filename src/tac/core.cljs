@@ -151,7 +151,6 @@
                  (.-KEYUP events/EventType)
                  (fn [e]
                    (let [key-code (.-keyCode e)]
-                     (.log js/console (clj->js "up") key-code)
                      (swap! key-state assoc key-code nil))))
 
   (events/listen window
