@@ -13,8 +13,8 @@
 
 (def grid 10)
 (def screen (.getContext (.getElementById js/document "screen") "2d"))
-(def screen-size {:x (/ (aget screen "canvas" "width") grid)
-                  :y (/ (aget screen "canvas" "height") grid)})
+(def screen-size {:x (aget screen "canvas" "width")
+                  :y (aget screen "canvas" "height")})
 (def window (dom/getWindow))
 (def key-state (atom {:left nil :right nil :up nil :down nil}))
 
@@ -116,6 +116,11 @@
                (+ (:x block) 0.5) (+ (:y block) 0.5)
                (- grid 1) (- grid 1)))
 
+(defn view-offset
+  [obj screen-size]
+  {:x (- (- (:x obj) (/ (:x screen-size) 2)))
+   :y (- (- (:y obj) (/ (:y screen-size) 2)))})
+
 (defn draw-player [player walls]
   (let [crosshair (:crosshair player)
         los (line-of-sight player crosshair walls)]
@@ -124,13 +129,30 @@
     (stroke-block (:color player) crosshair)))
 
 (defn draw [state]
-  (set! (.-fillStyle screen) "black")
-  (.fillRect screen 0 0 (* (:x screen-size) grid) (* (:y screen-size) grid))
-  (let [players (:player state)
+  (let [players (:players state)
+        player-to-center-on (nth players 0)
+        view-offset' (view-offset player-to-center-on screen-size)
         crosshair (get-in state [:player :crosshair])
         walls (:walls state)]
+
+    ;; center on player
+    (.save screen)
+    (.translate screen (:x view-offset') (:y view-offset'))
+
+    ;; clear screen
+    (set! (.-fillStyle screen) "black")
+    (.fillRect screen
+               (- (:x player-to-center-on) (/ (:x screen-size) 2))
+               (- (:y player-to-center-on) (/ (:y screen-size) 2))
+               (:x screen-size)
+               (:y screen-size))
+
+    ;; draw scene
     (dorun (map (partial fill-block "white") walls))
-    (dorun (map #(draw-player % walls) (:players state)))))
+    (dorun (map #(draw-player % walls) players))
+
+    ;; center back on origin
+    (.restore screen)))
 
 (defn tick [state]
   "Schedules next step and draw"
