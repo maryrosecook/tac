@@ -175,12 +175,13 @@
 
 (defmulti draw-player (fn [player walls] (get-in player [:crosshair :type])))
 
-(defmethod draw-player :rifle [player walls]
+(defmethod draw-player :rifle [player other-bodies]
   (let [crosshair-pos (-> (angle-to-vector (get-in player [:crosshair :angle])
                                            (magnitude screen-size))
                           (update :x #((partial to-grid grid) (+ % (:x player))))
                           (update :y #((partial to-grid grid) (+ % (:y player)))))
-        los (line-of-sight player crosshair-pos walls)]
+        los (line-of-sight player crosshair-pos other-bodies)]
+
     (fill-block (:color player) player)
     (dorun (map (partial fill-block (get-in player [:crosshair :color])) los))))
 
@@ -189,7 +190,7 @@
         player-to-center-on (nth players 0)
         view-offset' (view-offset player-to-center-on)
         crosshair (get-in state [:player :crosshair])
-        walls (:walls state)]
+        on-screen-bodies (filter (partial on-screen? player-to-center-on) (bodies state))]
 
     ;; center on player
     (.save screen)
@@ -205,8 +206,8 @@
 
     ;; draw scene
     (dorun (map (partial fill-block "white")
-                (filter (partial on-screen? player-to-center-on) walls)))
-    (dorun (map #(draw-player % walls) players))
+                (filter (partial on-screen? player-to-center-on) (:walls state))))
+    (dorun (map #(draw-player % (disj (set on-screen-bodies) %)) players))
 
     ;; center back on origin
     (.restore screen)))
