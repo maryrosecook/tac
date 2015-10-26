@@ -57,6 +57,10 @@
   [d]
   (* d 0.01745))
 
+
+(defn colliding? [b1 b2]
+  (= (pos b1) (pos b2)))
+
 (defn angle-to-vector
   [angle radius]
   (let [radians (deg->rad angle)]
@@ -91,21 +95,19 @@
       (merge crosshair {:angle angle :last-move (now)})
       crosshair)))
 
-(defn move-player [player action-to-key-code]
+(defn move-player [player other-bodies action-to-key-code]
   (let [new-pos (new-player-controlled-object-pos player action-to-key-code)]
     (if (and (not (moved-too-recently? player))
              (not (get @key-state (:aim action-to-key-code)))
-             (not= new-pos (pos player)))
+             (not= new-pos (pos player))
+             (not-any? (partial colliding? new-pos) other-bodies))
       (merge player new-pos {:last-move (now)})
       player)))
 
-(defn step-player [player]
+(defn step-player [player other-bodies]
   (-> player
-      (move-player (:action-to-key-code player))
+      (move-player other-bodies (:action-to-key-code player))
       (assoc :crosshair (move-rifle (:crosshair player) (:action-to-key-code player)))))
-
-(defn colliding? [b1 b2]
-  (= (pos b1) (pos b2)))
 
 ;; stolen from github.com/jackschaedler/goya/blob/master/src/cljs/goya/components/bresenham.cljs
 (defn bresenham-line [{x0 :x y0 :y} {x1 :x y1 :y}]
@@ -134,12 +136,17 @@
                        (- error delta-y)
                        (if is-steep (conj pixels {:x y :y x}) (conj pixels {:x x :y y})))))))))))
 
+(defn bodies
+  [state]
+  (set (concat (:walls state) (:players state))))
+
 (defn line-of-sight [a b bodies]
   (take-while (fn [body] (not-any? (partial colliding? body) bodies))
               (rest (bresenham-line a b))))
 
 (defn step [state]
-  (assoc state :players (map step-player (:players state))))
+  (let [bodies' (bodies state)]
+    (assoc state :players (map #(step-player % (disj bodies' %)) (:players state)))))
 
 (defn fill-block [color block]
   (set! (.-fillStyle screen) color)
