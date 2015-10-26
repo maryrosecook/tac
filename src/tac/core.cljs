@@ -100,8 +100,9 @@
       player)))
 
 (defn step-player [player]
-  (assoc (move-player player (:action-to-key-code player))
-    :crosshair (move-rifle (:crosshair player) (:action-to-key-code player))))
+  (-> player
+      (move-player (:action-to-key-code player))
+      (assoc :crosshair (move-rifle (:crosshair player) (:action-to-key-code player)))))
 
 (defn colliding? [b1 b2]
   (= (pos b1) (pos b2)))
