@@ -134,7 +134,7 @@
                        (if is-steep (conj pixels {:x y :y x}) (conj pixels {:x x :y y})))))))))))
 
 (defn line-of-sight [a b bodies]
-  (take-while (fn [body] (empty? (filter (partial colliding? body) bodies)))
+  (take-while (fn [body] (not-any? (partial colliding? body) bodies))
               (rest (bresenham-line a b))))
 
 (defn step [state]
