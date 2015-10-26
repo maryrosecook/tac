@@ -150,6 +150,10 @@
                (+ (:x block) 0.5) (+ (:y block) 0.5)
                (- grid 1) (- grid 1)))
 
+(defn to-grid
+  [grid n]
+  (- n (mod n grid)))
+
 (defn view-offset
   [obj screen-size]
   {:x (- (- (:x obj) (/ (:x screen-size) 2)))
@@ -158,12 +162,10 @@
 (defmulti draw-player (fn [player walls] (get-in player [:crosshair :type])))
 
 (defmethod draw-player :rifle [player walls]
-  (let [off-grid-crosshair-pos (angle-to-vector (get-in player [:crosshair :angle])
-                                                (magnitude screen-size))
-        crosshair-pos {:x (- (:x off-grid-crosshair-pos)
-                             (mod (:x off-grid-crosshair-pos) grid))
-                       :y (- (:y off-grid-crosshair-pos)
-                             (mod (:y off-grid-crosshair-pos) grid))}
+  (let [crosshair-pos (-> (angle-to-vector (get-in player [:crosshair :angle])
+                                           (magnitude screen-size))
+                          (update :x #((partial to-grid grid) %))
+                          (update :y #((partial to-grid grid) %)))
         los (line-of-sight player crosshair-pos walls)]
     (fill-block (:color player) player)
     (dorun (map (partial fill-block (get-in player [:crosshair :color])) los))))
