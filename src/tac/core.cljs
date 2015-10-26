@@ -49,12 +49,46 @@
              (update obj :y (if (= :up direction) #(- % grid) #(+ % grid)))))]]
     (pos (reduce #(%2 %1) obj (keep identity moves)))))
 
-(defn move-crosshair [crosshair action-to-key-code]
+(defn magnitude
+  [v]
+  (js/Math.sqrt (+ (* (:x v) (:x v)) (* (:y v) (:y v)))))
+
+(defn deg->rad
+  [d]
+  (* d 0.01745))
+
+(defn angle-to-vector
+  [angle radius]
+  (let [radians (deg->rad angle)]
+    {:x (* radius (js/Math.cos radians))
+     :y (* radius (js/Math.sin radians))}))
+
+(defn new-rotating-aim-angle [angle action-to-key-code]
+  (let [turn-speed 3
+        key-code-to-action (set/map-invert action-to-key-code)
+        down-key-state (into {} (->> @key-state
+                                     (filter second)
+                                     (map #(assoc % 0 (get key-code-to-action (first %))))
+                                     (filter first)))
+        direction (latest-key (select-keys down-key-state [:left :right]))]
+    (if direction
+      (+ angle (* (if (= direction :left) -1 1) turn-speed))
+      angle)))
+
+(defn move-mortar [crosshair action-to-key-code]
   (let [new-pos (new-player-controlled-object-pos crosshair action-to-key-code)]
     (if (and (can-move crosshair)
              (get @key-state (:aim action-to-key-code))
              (not= new-pos (pos crosshair)))
       (merge crosshair new-pos {:last-move (now)})
+      crosshair)))
+
+(defn move-rifle [crosshair action-to-key-code]
+  (let [angle (new-rotating-aim-angle (:angle crosshair) action-to-key-code)]
+    (if (and (can-move crosshair)
+             (get @key-state (:aim action-to-key-code))
+             (not= angle (:angle crosshair)))
+      (merge crosshair {:angle angle :last-move (now)})
       crosshair)))
 
 (defn move-player [player action-to-key-code]
@@ -67,7 +101,7 @@
 
 (defn step-player [player]
   (assoc (move-player player (:action-to-key-code player))
-    :crosshair (move-crosshair (:crosshair player) (:action-to-key-code player))))
+    :crosshair (move-rifle (:crosshair player) (:action-to-key-code player))))
 
 (defn colliding? [b1 b2]
   (= (pos b1) (pos b2)))
@@ -121,12 +155,18 @@
   {:x (- (- (:x obj) (/ (:x screen-size) 2)))
    :y (- (- (:y obj) (/ (:y screen-size) 2)))})
 
-(defn draw-player [player walls]
-  (let [crosshair (:crosshair player)
-        los (line-of-sight player crosshair walls)]
+(defmulti draw-player (fn [player walls] (get-in player [:crosshair :type])))
+
+(defmethod draw-player :rifle [player walls]
+  (let [off-grid-crosshair-pos (angle-to-vector (get-in player [:crosshair :angle])
+                                                (magnitude screen-size))
+        crosshair-pos {:x (- (:x off-grid-crosshair-pos)
+                             (mod (:x off-grid-crosshair-pos) grid))
+                       :y (- (:y off-grid-crosshair-pos)
+                             (mod (:y off-grid-crosshair-pos) grid))}
+        los (line-of-sight player crosshair-pos walls)]
     (fill-block (:color player) player)
-    (dorun (map (partial fill-block (:color crosshair)) los))
-    (stroke-block (:color player) crosshair)))
+    (dorun (map (partial fill-block (get-in player [:crosshair :color])) los))))
 
 (defn draw [state]
   (let [players (:players state)
@@ -179,8 +219,18 @@
 
 (defn make-player
   [x y color crosshair-color key-map]
-  {:x x :y y :last-move 0 :move-every 0 :color color :action-to-key-code key-map
-   :crosshair {:x (+ x grid) :y (+ x grid) :last-move 0 :move-every 50
+  {:x x
+   :y y
+   :last-move 0
+   :move-every 200
+   :color color
+   :action-to-key-code key-map
+   :weapon :rifle
+   :crosshair {:type :rifle
+               :x (+ x grid)
+               :y (+ x grid)
+               :last-move 0
+               :move-every 0
                :color crosshair-color}})
 
 (defn keyboard-input-to-key-state []
