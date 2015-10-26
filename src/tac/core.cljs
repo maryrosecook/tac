@@ -57,6 +57,12 @@
   [d]
   (* d 0.01745))
 
+(defn on-screen?
+  [screen-center obj]
+  (not (or (< (:x obj) (- (:x screen-center) (/ (:x screen-size) 2)))
+           (> (:x obj) (+ (:x screen-center) (/ (:x screen-size) 2)))
+           (< (:y obj) (- (:y screen-center) (/ (:y screen-size) 2)))
+           (> (:y obj) (+ (:y screen-center) (/ (:y screen-size) 2))))))
 
 (defn colliding? [b1 b2]
   (= (pos b1) (pos b2)))
@@ -198,7 +204,8 @@
                (:y screen-size))
 
     ;; draw scene
-    (dorun (map (partial fill-block "white") walls))
+    (dorun (map (partial fill-block "white")
+                (filter (partial on-screen? player-to-center-on) walls)))
     (dorun (map #(draw-player % walls) players))
 
     ;; center back on origin
