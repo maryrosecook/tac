@@ -164,8 +164,8 @@
 (defmethod draw-player :rifle [player walls]
   (let [crosshair-pos (-> (angle-to-vector (get-in player [:crosshair :angle])
                                            (magnitude screen-size))
-                          (update :x #((partial to-grid grid) %))
-                          (update :y #((partial to-grid grid) %)))
+                          (update :x #((partial to-grid grid) (+ % (:x player))))
+                          (update :y #((partial to-grid grid) (+ % (:y player)))))
         los (line-of-sight player crosshair-pos walls)]
     (fill-block (:color player) player)
     (dorun (map (partial fill-block (get-in player [:crosshair :color])) los))))
