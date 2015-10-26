@@ -28,8 +28,8 @@
 (defn now []
   (.getTime (js/Date.)))
 
-(defn can-move [obj]
-  (passed (:last-move obj) (:move-every obj)))
+(defn moved-too-recently? [obj]
+  (not (passed (:last-move obj) (:move-every obj))))
 
 (defn pos [b]
   (select-keys b [:x :y]))
@@ -77,7 +77,7 @@
 
 (defn move-mortar [crosshair action-to-key-code]
   (let [new-pos (new-player-controlled-object-pos crosshair action-to-key-code)]
-    (if (and (can-move crosshair)
+    (if (and (not (moved-too-recently? crosshair))
              (get @key-state (:aim action-to-key-code))
              (not= new-pos (pos crosshair)))
       (merge crosshair new-pos {:last-move (now)})
@@ -85,7 +85,7 @@
 
 (defn move-rifle [crosshair action-to-key-code]
   (let [angle (new-rotating-aim-angle (:angle crosshair) action-to-key-code)]
-    (if (and (can-move crosshair)
+    (if (and (not (moved-too-recently? crosshair))
              (get @key-state (:aim action-to-key-code))
              (not= angle (:angle crosshair)))
       (merge crosshair {:angle angle :last-move (now)})
@@ -93,7 +93,7 @@
 
 (defn move-player [player action-to-key-code]
   (let [new-pos (new-player-controlled-object-pos player action-to-key-code)]
-    (if (and (can-move player)
+    (if (and (not (moved-too-recently? player))
              (not (get @key-state (:aim action-to-key-code)))
              (not= new-pos (pos player)))
       (merge player new-pos {:last-move (now)})
