@@ -155,7 +155,7 @@
   (- n (mod n grid)))
 
 (defn view-offset
-  [obj screen-size]
+  [obj]
   {:x (- (- (:x obj) (/ (:x screen-size) 2)))
    :y (- (- (:y obj) (/ (:y screen-size) 2)))})
 
@@ -173,7 +173,7 @@
 (defn draw [state]
   (let [players (:players state)
         player-to-center-on (nth players 0)
-        view-offset' (view-offset player-to-center-on screen-size)
+        view-offset' (view-offset player-to-center-on)
         crosshair (get-in state [:player :crosshair])
         walls (:walls state)]
 
