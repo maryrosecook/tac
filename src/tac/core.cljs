@@ -163,9 +163,25 @@
        (draw new-state)
        (tick new-state)))))
 
-(defn add-walls [state]
-  (assoc state :walls [{:x 70 :y 70} {:x 80 :y 70} {:x 70 :y 80} {:x 80 :y 80}
-                       {:x 150 :y 150} {:x 160 :y 150} {:x 150 :y 160} {:x 160 :y 160}]))
+(defn make-walls
+  []
+  (let [d 300]
+    (concat
+     ;; pillars
+     [{:x 70 :y 70} {:x 80 :y 70} {:x 70 :y 80} {:x 80 :y 80}
+      {:x 150 :y 150} {:x 160 :y 150} {:x 150 :y 160} {:x 160 :y 160}]
+
+     ;; border walls
+     (map #(hash-map :x %          :y 0)          (range 0 (- d grid) grid))
+     (map #(hash-map :x (- d grid) :y %)          (range 0 (- d grid) grid))
+     (map #(hash-map :x %          :y (- d grid)) (range grid d grid))
+     (map #(hash-map :x 0          :y %)          (range grid d grid)))))
+
+(defn make-player
+  [x y color crosshair-color key-map]
+  {:x x :y y :last-move 0 :move-every 0 :color color :action-to-key-code key-map
+   :crosshair {:x (+ x grid) :y (+ x grid) :last-move 0 :move-every 50
+               :color crosshair-color}})
 
 (defn keyboard-input-to-key-state []
   (events/listen window
@@ -181,14 +197,10 @@
                      (if (nil? (get @key-state key-code))
                        (swap! key-state assoc key-code (now)))))))
 
+;; start
+
 (keyboard-input-to-key-state)
 (tick
- (-> {:players [{:x 50 :y 50 :last-move 0 :move-every 200 :color "red"
-                 :action-to-key-code (:player-1-dvorak key-maps)
-                 :crosshair {:x 0 :y 0 :last-move 0 :move-every 50
-                             :color "rgba(255, 0, 0, 0.5)"}}
-                {:x 350 :y 350 :last-move 0 :move-every 200 :color "blue"
-                 :action-to-key-code (:player-2-dvorak key-maps)
-                 :crosshair {:x 390 :y 390 :last-move 0 :move-every 50
-                             :color "rgba(0, 0, 255, 0.5)"}}]}
-     (add-walls)))
+ (-> {:players [(make-player 50 50 "red" "rgba(255, 0, 0, 0.5)" (:player-1-dvorak key-maps))
+                (make-player 250 250 "blue" "rgba(0, 0, 255, 0.5)" (:player-2-dvorak key-maps))]}
+     (assoc :walls (make-walls))))
