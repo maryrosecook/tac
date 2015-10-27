@@ -173,9 +173,9 @@
   {:x (- (- (:x obj) (/ (:x screen-size) 2)))
    :y (- (- (:y obj) (/ (:y screen-size) 2)))})
 
-(defmulti draw-player (fn [player walls] (get-in player [:crosshair :type])))
+(defmulti draw-crosshair (fn [player walls] (get-in player [:crosshair :type])))
 
-(defmethod draw-player :rifle [player other-bodies]
+(defmethod draw-crosshair :rifle [player other-bodies]
   (let [crosshair-pos (-> (angle-to-vector (get-in player [:crosshair :angle])
                                            (magnitude screen-size))
                           (update :x #((partial to-grid grid) (+ % (:x player))))
@@ -204,10 +204,13 @@
                (:x screen-size)
                (:y screen-size))
 
-    ;; draw scene
+    ;; draw walls
     (dorun (map (partial fill-block "white")
                 (filter (partial on-screen? player-to-center-on) (:walls state))))
-    (dorun (map #(draw-player % (disj (set on-screen-bodies) %)) players))
+
+    ;; draw players
+    (dorun (map #(fill-block (:color %) %) players))
+    (draw-crosshair player-to-center-on (disj (set on-screen-bodies) player-to-center-on))
 
     ;; center back on origin
     (.restore screen)))
