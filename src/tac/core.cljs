@@ -88,9 +88,18 @@
   [v]
   (js/Math.sqrt (+ (* (:x v) (:x v)) (* (:y v) (:y v)))))
 
+(defn unit-vector
+  [v]
+  {:x (/ (:x v) (magnitude v))
+   :y (/ (:y v) (magnitude v))})
+
 (defn deg->rad
   [d]
   (* d 0.01745))
+
+(defn rad->deg
+  [r]
+  (/ r 0.01745))
 
 (defn on-screen?
   [screen-center obj]
@@ -107,6 +116,12 @@
   (let [radians (deg->rad angle)]
     {:x (* radius (js/Math.cos radians))
      :y (* radius (js/Math.sin radians))}))
+
+(defn vector->angle
+  [v]
+  (let [unit-vector' (unit-vector v)
+        uncorrected-angle (rad->deg (js/Math.atan2 (:x unit-vector') (- (:y unit-vector'))))]
+    (if (< uncorrected-angle 0) (+ uncorrected-angle 360) uncorrected-angle)))
 
 (defn ->grid
   [grid n]
@@ -195,9 +210,23 @@
                                (not-any? (partial colliding? point) bodies)))
               (rest (bresenham-line a b))))
 
-(defn visible? [a b bodies]
-  (empty? (filter (fn [point] (some (partial colliding? point) bodies))
-                  (rest (bresenham-line a b)))))
+(defn vector-between
+  [start end]
+  {:x (- (:x end) (:x start))
+   :y (- (:y end) (:y start))})
+
+(defn abs-angle-difference
+  "Handles angles <0 and >360"
+  [a b]
+  (js/Math.abs (- (mod (+ (- b a) 180) 360) 180)))
+
+(defn visible? [looker target bodies]
+  (let [bodies-without-target (disj (set bodies) target)
+        los-angle (vector->angle (vector-between looker (crosshair-position looker)))
+        looker-to-target-angle (vector->angle (vector-between looker target))]
+    (and (< (abs-angle-difference los-angle looker-to-target-angle) 90)
+         (empty? (filter (fn [point] (some (partial colliding? point) bodies-without-target))
+                         (rest (bresenham-line looker target)))))))
 
 (defn unpress-keys
   []
@@ -270,9 +299,7 @@
     (draw-crosshair player-to-center-on (disj (set on-screen-bodies) player-to-center-on))
 
     ;; draw other player
-    (if (visible? player-to-center-on
-                  (nth players 1)
-                  (disj (set on-screen-bodies) (nth players 1)))
+    (if (visible? player-to-center-on (nth players 1) on-screen-bodies)
       (fill-block (:color (nth players 1)) (nth players 1)))
 
     ;; draw projectiles
