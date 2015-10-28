@@ -195,6 +195,10 @@
                                (not-any? (partial colliding? point) bodies)))
               (rest (bresenham-line a b))))
 
+(defn visible? [a b bodies]
+  (empty? (filter (fn [point] (some (partial colliding? point) bodies))
+                  (rest (bresenham-line a b)))))
+
 (defn unpress-keys
   []
   (dorun (map (fn [key-code] (swap! key-state
@@ -261,9 +265,15 @@
     (dorun (map (partial fill-block "white")
                 (filter (partial on-screen? player-to-center-on) (:walls state))))
 
-    ;; draw players
-    (dorun (map #(fill-block (:color %) %) players))
+    ;; draw player
+    (fill-block (:color player-to-center-on) player-to-center-on)
     (draw-crosshair player-to-center-on (disj (set on-screen-bodies) player-to-center-on))
+
+    ;; draw other player
+    (if (visible? player-to-center-on
+                  (nth players 1)
+                  (disj (set on-screen-bodies) (nth players 1)))
+      (fill-block (:color (nth players 1)) (nth players 1)))
 
     ;; draw projectiles
     (dorun (map (partial fill-block "yellow")
