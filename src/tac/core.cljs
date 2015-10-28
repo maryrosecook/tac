@@ -127,13 +127,13 @@
   [grid n]
   (- n (mod n grid)))
 
-(defmulti crosshair-position (fn [player] (get-in player [:weapon :type])))
+(defmulti crosshair-position (fn [soldier] (get-in soldier [:weapon :type])))
 
-(defmethod crosshair-position :rifle [player]
-  (-> (angle->vector (get-in player [:weapon :angle])
+(defmethod crosshair-position :rifle [soldier]
+  (-> (angle->vector (get-in soldier [:weapon :angle])
                      (magnitude {:x level-dimensions :y level-dimensions}))
-      (update :x #((partial ->grid grid) (+ % (:x player))))
-      (update :y #((partial ->grid grid) (+ % (:y player))))))
+      (update :x #((partial ->grid grid) (+ % (:x soldier))))
+      (update :y #((partial ->grid grid) (+ % (:y soldier))))))
 
 (defmulti make-projectile (fn [player] (get-in player [:weapon :type])))
 
@@ -168,26 +168,26 @@
       (update weapon :firing (fn [firing] (not firing))))
     weapon))
 
-(defn move-player [player other-bodies action->key-code]
-  (let [new-pos (new-player-controlled-object-pos player action->key-code)]
-    (if (and (not (moved-too-recently? player))
+(defn move-soldier [soldier other-bodies action->key-code]
+  (let [new-pos (new-player-controlled-object-pos soldier action->key-code)]
+    (if (and (not (moved-too-recently? soldier))
              (not (get-in @key-state [(:aim action->key-code) :down]))
-             (not= new-pos (pos player))
+             (not= new-pos (pos soldier))
              (not-any? (partial colliding? new-pos) other-bodies))
-      (merge player new-pos {:last-move (now)})
-      player)))
+      (merge soldier new-pos {:last-move (now)})
+      soldier)))
 
-(defn generate-projectiles [players]
-  (->> players
+(defn generate-projectiles [soldiers]
+  (->> soldiers
        (filter #(let [weapon (:weapon %)]
                   (and (:firing weapon)
                        (passed (:last-shot weapon) (:shoot-every weapon)))))
-       (reduce (fn [a player] (assoc a player (make-projectile player))) {})))
+       (reduce (fn [a soldier] (assoc a soldier (make-projectile soldier))) {})))
 
-(defn step-player
-  [{action->key-code :action->key-code :as player} other-bodies]
-  (-> player
-      (move-player other-bodies action->key-code)
+(defn step-soldier
+  [soldier action->key-code other-bodies]
+  (-> soldier
+      (move-soldier other-bodies action->key-code)
       (update :weapon (partial update-firing-status action->key-code))
       (update :weapon (partial move-rifle action->key-code))))
 
@@ -203,7 +203,7 @@
 
 (defn bodies
   [state]
-  (set (concat (:walls state) (:players state))))
+  (set (concat (:walls state) (:soldiers state))))
 
 (defn line-of-sight [a b bodies screen-center]
   (take-while (fn [point] (and (on-screen? screen-center point)
@@ -236,19 +236,41 @@
                                     (assoc (get @key-state key-code) :pressed nil)))
               (keys @key-state))))
 
+(defn soldier->key-map
+  [soldier players]
+  (some (fn [player] (if (= (:player-id player) (:player-id soldier))
+                       (:action->key-code player)))
+        players))
+
+(defn current-soldier
+  [soldiers {player-id :player-id current-soldier-id :current-soldier-id}]
+  (some #(if (and (= player-id (:player-id %))
+                  (= current-soldier-id (get-in % [:weapon :type])))
+           %)
+        soldiers))
+
+(defn player-soldiers
+  [soldiers {player-id :player-id}]
+  (filter #(= player-id (:player-id %)) soldiers))
+
 (defn step [state]
-  (let [bodies' (bodies state)]
+  (let [bodies' (bodies state)
+        current-soldiers (map (partial current-soldier (:soldiers state))
+                              (:players state))]
     (-> state
-        (assoc :players (map #(step-player % (disj bodies' %)) (:players state)))
+        (assoc :soldiers (map #(step-soldier %
+                                             (soldier->key-map % (:players state))
+                                             (disj bodies' %))
+                              current-soldiers))
         ((fn [state]
-           (let [projectiles (generate-projectiles (:players state))]
+           (let [projectiles (generate-projectiles (:soldiers state))]
              (-> state
                  (update :projectiles (partial concat (vals projectiles)))
-                 (update :players
-                         (partial map (fn [player]
-                                        (if (contains? projectiles player)
-                                          (assoc-in player [:weapon :last-shot] (now))
-                                          player))))))))
+                 (update :soldiers
+                         (partial map (fn [soldier]
+                                        (if (contains? projectiles soldier)
+                                          (assoc-in soldier [:weapon :last-shot] (now))
+                                          soldier))))))))
         (update :projectiles (partial step-projectiles (bodies state))))))
 
 (defn fill-block [color block]
@@ -266,18 +288,17 @@
   {:x (- (- (:x obj) (/ (:x screen-size) 2)))
    :y (- (- (:y obj) (/ (:y screen-size) 2)))})
 
-(defn draw-crosshair [player other-bodies]
-  (let [los (line-of-sight player (crosshair-position player) other-bodies player)]
-    (fill-block (:color player) player)
-    (dorun (map (partial fill-block (get-in player [:weapon :color])) los))))
+(defn draw-crosshair [soldier other-bodies]
+  (let [los (line-of-sight soldier (crosshair-position soldier) other-bodies soldier)]
+    (fill-block (:color soldier) soldier)
+    (dorun (map (partial fill-block (get-in soldier [:weapon :color])) los))))
 
 (defn draw [state]
-  (let [players (:players state)
-        player-to-center-on (nth players 0)
-        view-offset' (view-offset player-to-center-on)
-        weapon (get-in state [:player :weapon])
-        on-screen-bodies (filter (partial on-screen? player-to-center-on) (bodies state))]
-
+  (let [local-player (nth (:players state) 0)
+        remote-player (nth (:players state) 1)
+        current-soldier' (current-soldier (:soldiers state) local-player)
+        view-offset' (view-offset current-soldier')
+        on-screen-bodies (filter (partial on-screen? current-soldier') (bodies state))]
     ;; center on player
     (.save screen)
     (.translate screen (:x view-offset') (:y view-offset'))
@@ -285,26 +306,27 @@
     ;; clear screen
     (set! (.-fillStyle screen) "black")
     (.fillRect screen
-               (- (:x player-to-center-on) (/ (:x screen-size) 2))
-               (- (:y player-to-center-on) (/ (:y screen-size) 2))
+               (- (:x current-soldier') (/ (:x screen-size) 2))
+               (- (:y current-soldier') (/ (:y screen-size) 2))
                (:x screen-size)
                (:y screen-size))
 
     ;; draw walls
     (dorun (map (partial fill-block "white")
-                (filter (partial on-screen? player-to-center-on) (:walls state))))
+                (filter (partial on-screen? current-soldier') (:walls state))))
 
-    ;; draw player
-    (fill-block (:color player-to-center-on) player-to-center-on)
-    (draw-crosshair player-to-center-on (disj (set on-screen-bodies) player-to-center-on))
+    ;; draw local soldiers
+    (dorun (map #(fill-block (:color %) %) (player-soldiers (:soldiers state) local-player)))
+    (draw-crosshair current-soldier' (disj (set on-screen-bodies) current-soldier'))
 
-    ;; draw other player
-    (if (visible? player-to-center-on (nth players 1) on-screen-bodies)
-      (fill-block (:color (nth players 1)) (nth players 1)))
+    ;; draw remote soldiers
+    (dorun (map #(fill-block (:color %) %)
+                (filter #(visible? current-soldier' % on-screen-bodies)
+                        (player-soldiers (:soldiers state) remote-player))))
 
     ;; draw projectiles
     (dorun (map (partial fill-block "yellow")
-                (filter (partial on-screen? player-to-center-on) (:projectiles state))))
+                (filter (partial on-screen? current-soldier') (:projectiles state))))
 
     ;; center back on origin
     (.restore screen)))
@@ -334,14 +356,22 @@
      (map #(hash-map :x 0          :y %)          (range grid d grid)))))
 
 (defn make-player
-  [x y color crosshair-color key-map]
+  [player-id action->key-code]
+  {:player-id player-id
+   :action->key-code action->key-code
+   :current-soldier-id :rifle})
+
+(defmulti make-soldier (fn [type & rest] type))
+
+(defmethod make-soldier :rifle
+  [type player-id x y color crosshair-color]
   {:x x
    :y y
+   :player-id player-id
    :last-move 0
    :move-every 200
    :color color
-   :action->key-code key-map
-   :weapon {:type :rifle
+   :weapon {:type type
             :x (+ x grid)
             :y (+ x grid)
             :last-move 0
@@ -376,7 +406,9 @@
 
 (keyboard-input->key-state)
 (tick
- (-> {:players [(make-player 50 50 "red" "rgba(255, 0, 0, 0.5)" (:player-1-dvorak key-maps))
-                (make-player 250 250 "blue" "rgba(0, 0, 255, 0.5)" (:player-2-dvorak key-maps))]
+ (-> {:players [(make-player :red (:player-1-dvorak key-maps))
+                (make-player :blue (:player-2-dvorak key-maps))]
+      :soldiers [(make-soldier :rifle :red 50 50 "red" "rgba(255, 0, 0, 0.5)")
+                 (make-soldier :rifle :blue 250 250 "blue" "rgba(0, 0, 255, 0.5)")]
       :projectiles []}
      (assoc :walls (make-walls))))
