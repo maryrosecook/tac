@@ -8,15 +8,17 @@
   (repl/connect "http://localhost:9000/repl"))
 
 (def key-maps
-  {:player-1-dvorak {:left 65 :right 69 :up 188 :down 79 :aim 16 :switch 17}
+  {:player-1-dvorak {:left 65 :right 69 :up 188 :down 79 :aim 16 :firing 85 :switch 73}
    :player-2-dvorak {:left 72 :right 78 :up 67 :down 84 :aim 18 :switch 16}})
 
+(def rifle-turn-speed 5)
 (def grid 10)
+(def level-dimensions 500)
 (def screen (.getContext (.getElementById js/document "screen") "2d"))
 (def screen-size {:x (aget screen "canvas" "width")
                   :y (aget screen "canvas" "height")})
 (def window (dom/getWindow))
-(def key-state (atom {:left nil :right nil :up nil :down nil}))
+(def key-state (atom {}))
 
 (defn latest-key [key-state]
   (if (not (empty? key-state))
@@ -34,86 +36,26 @@
 (defn pos [b]
   (select-keys b [:x :y]))
 
+(defn active-keys
+  [key-code-to-action down-or-pressed]
+  (into {} (->> @key-state
+                (map (fn [[key-code down-and-pressed]]
+                       [key-code (get down-and-pressed down-or-pressed)])) ;; get down or pressed
+                (filter second) ;; drop inactive
+                (map #(assoc % 0 (get key-code-to-action (first %)))) ;; key-code->action
+                (filter first)))) ;; drop ones not present in key map
+
 (defn new-player-controlled-object-pos [obj action-to-key-code]
   (let [key-code-to-action (set/map-invert action-to-key-code)
-        down-key-state (into {} (->> @key-state
-                                     (filter second)
-                                     (map #(assoc % 0 (get key-code-to-action (first %))))
-                                     (filter first)))
+        down-keys (active-keys key-code-to-action :down)
         moves
-        [(if-let [direction (latest-key (select-keys down-key-state [:left :right]))]
+        [(if-let [direction (latest-key (select-keys down-keys [:left :right]))]
            (fn [obj]
              (update obj :x (if (= :left direction) #(- % grid) #(+ % grid)))))
-         (if-let [direction (latest-key (select-keys down-key-state [:up :down]))]
+         (if-let [direction (latest-key (select-keys down-keys [:up :down]))]
            (fn [obj]
              (update obj :y (if (= :up direction) #(- % grid) #(+ % grid)))))]]
     (pos (reduce #(%2 %1) obj (keep identity moves)))))
-
-(defn magnitude
-  [v]
-  (js/Math.sqrt (+ (* (:x v) (:x v)) (* (:y v) (:y v)))))
-
-(defn deg->rad
-  [d]
-  (* d 0.01745))
-
-(defn on-screen?
-  [screen-center obj]
-  (not (or (< (:x obj) (- (:x screen-center) (/ (:x screen-size) 2)))
-           (> (:x obj) (+ (:x screen-center) (/ (:x screen-size) 2)))
-           (< (:y obj) (- (:y screen-center) (/ (:y screen-size) 2)))
-           (> (:y obj) (+ (:y screen-center) (/ (:y screen-size) 2))))))
-
-(defn colliding? [b1 b2]
-  (= (pos b1) (pos b2)))
-
-(defn angle-to-vector
-  [angle radius]
-  (let [radians (deg->rad angle)]
-    {:x (* radius (js/Math.cos radians))
-     :y (* radius (js/Math.sin radians))}))
-
-(defn new-rotating-aim-angle [angle action-to-key-code]
-  (let [turn-speed 3
-        key-code-to-action (set/map-invert action-to-key-code)
-        down-key-state (into {} (->> @key-state
-                                     (filter second)
-                                     (map #(assoc % 0 (get key-code-to-action (first %))))
-                                     (filter first)))
-        direction (latest-key (select-keys down-key-state [:left :right]))]
-    (if direction
-      (+ angle (* (if (= direction :left) -1 1) turn-speed))
-      angle)))
-
-(defn move-mortar [crosshair action-to-key-code]
-  (let [new-pos (new-player-controlled-object-pos crosshair action-to-key-code)]
-    (if (and (not (moved-too-recently? crosshair))
-             (get @key-state (:aim action-to-key-code))
-             (not= new-pos (pos crosshair)))
-      (merge crosshair new-pos {:last-move (now)})
-      crosshair)))
-
-(defn move-rifle [crosshair action-to-key-code]
-  (let [angle (new-rotating-aim-angle (:angle crosshair) action-to-key-code)]
-    (if (and (not (moved-too-recently? crosshair))
-             (get @key-state (:aim action-to-key-code))
-             (not= angle (:angle crosshair)))
-      (merge crosshair {:angle angle :last-move (now)})
-      crosshair)))
-
-(defn move-player [player other-bodies action-to-key-code]
-  (let [new-pos (new-player-controlled-object-pos player action-to-key-code)]
-    (if (and (not (moved-too-recently? player))
-             (not (get @key-state (:aim action-to-key-code)))
-             (not= new-pos (pos player))
-             (not-any? (partial colliding? new-pos) other-bodies))
-      (merge player new-pos {:last-move (now)})
-      player)))
-
-(defn step-player [player other-bodies]
-  (-> player
-      (move-player other-bodies (:action-to-key-code player))
-      (assoc :crosshair (move-rifle (:crosshair player) (:action-to-key-code player)))))
 
 ;; stolen from github.com/jackschaedler/goya/blob/master/src/cljs/goya/components/bresenham.cljs
 (defn bresenham-line [{x0 :x y0 :y} {x1 :x y1 :y}]
@@ -142,17 +84,139 @@
                        (- error delta-y)
                        (if is-steep (conj pixels {:x y :y x}) (conj pixels {:x x :y y})))))))))))
 
+(defn magnitude
+  [v]
+  (js/Math.sqrt (+ (* (:x v) (:x v)) (* (:y v) (:y v)))))
+
+(defn deg->rad
+  [d]
+  (* d 0.01745))
+
+(defn on-screen?
+  [screen-center obj]
+  (not (or (< (:x obj) (- (:x screen-center) (/ (:x screen-size) 2)))
+           (> (:x obj) (+ (:x screen-center) (/ (:x screen-size) 2)))
+           (< (:y obj) (- (:y screen-center) (/ (:y screen-size) 2)))
+           (> (:y obj) (+ (:y screen-center) (/ (:y screen-size) 2))))))
+
+(defn colliding? [b1 b2]
+  (= (pos b1) (pos b2)))
+
+(defn angle-to-vector
+  [angle radius]
+  (let [radians (deg->rad angle)]
+    {:x (* radius (js/Math.cos radians))
+     :y (* radius (js/Math.sin radians))}))
+
+(defn to-grid
+  [grid n]
+  (- n (mod n grid)))
+
+(defmulti crosshair-position (fn [player] (get-in player [:weapon :type])))
+
+(defmethod crosshair-position :rifle [player]
+  (-> (angle-to-vector (get-in player [:weapon :angle])
+                       (magnitude {:x level-dimensions :y level-dimensions}))
+      (update :x #((partial to-grid grid) (+ % (:x player))))
+      (update :y #((partial to-grid grid) (+ % (:y player))))))
+
+(defmulti make-projectile (fn [player] (get-in player [:weapon :type])))
+
+(defmethod make-projectile :rifle
+  [player]
+  (let [[start & path] (rest (bresenham-line player (crosshair-position player)))]
+    (merge start
+           {:type :bullet
+            :last-move 0
+            :move-every 100
+            :path path})))
+
+(defn new-rotating-aim-angle [angle action-to-key-code]
+  (let [key-code-to-action (set/map-invert action-to-key-code)
+        down-keys (active-keys key-code-to-action :down)
+        direction (latest-key (select-keys down-keys [:left :right]))]
+    (if direction
+      (+ angle (* (if (= direction :left) -1 1) rifle-turn-speed))
+      angle)))
+
+(defn move-rifle [action-to-key-code weapon]
+  (let [angle (new-rotating-aim-angle (:angle weapon) action-to-key-code)]
+    (if (and (not (moved-too-recently? weapon))
+             (get-in @key-state [(:aim action-to-key-code) :down])
+             (not= angle (:angle weapon)))
+      (merge weapon {:angle angle :last-move (now)})
+      weapon)))
+
+(defn update-firing-status [action-to-key-code weapon]
+  (if (contains? (active-keys (set/map-invert action-to-key-code) :pressed) :firing)
+    (do
+      (update weapon :firing (fn [firing] (not firing))))
+    weapon))
+
+(defn move-player [player other-bodies action-to-key-code]
+  (let [new-pos (new-player-controlled-object-pos player action-to-key-code)]
+    (if (and (not (moved-too-recently? player))
+             (not (get-in @key-state [(:aim action-to-key-code) :down]))
+             (not= new-pos (pos player))
+             (not-any? (partial colliding? new-pos) other-bodies))
+      (merge player new-pos {:last-move (now)})
+      player)))
+
+(defn generate-projectiles [players]
+  (->> players
+       (filter #(let [weapon (:weapon %)]
+                  (and (:firing weapon)
+                       (passed (:last-shot weapon) (:shoot-every weapon)))))
+       (reduce (fn [a player] (assoc a player (make-projectile player))) {})))
+
+(defn step-player
+  [{action-to-key-code :action-to-key-code :as player} other-bodies]
+  (-> player
+      (move-player other-bodies action-to-key-code)
+      (update :weapon (partial update-firing-status action-to-key-code))
+      (update :weapon (partial move-rifle action-to-key-code))))
+
+(defn step-projectiles
+  [bodies projectiles]
+  (->> projectiles
+       (filter #(not-any? (partial colliding? %) bodies))
+       (map (fn [projectile]
+              (if (not (moved-too-recently? projectile))
+                (let [[new-pos & line-tail] (:path projectile)]
+                  (merge projectile new-pos {:path line-tail}))
+                projectile)))))
+
 (defn bodies
   [state]
   (set (concat (:walls state) (:players state))))
 
-(defn line-of-sight [a b bodies]
-  (take-while (fn [body] (not-any? (partial colliding? body) bodies))
+(defn line-of-sight [a b bodies screen-center]
+  (take-while (fn [point] (and (on-screen? screen-center point)
+                               (not-any? (partial colliding? point) bodies)))
               (rest (bresenham-line a b))))
+
+(defn unpress-keys
+  []
+  (dorun (map (fn [key-code] (swap! key-state
+                                    assoc
+                                    key-code
+                                    (assoc (get @key-state key-code) :pressed nil)))
+              (keys @key-state))))
 
 (defn step [state]
   (let [bodies' (bodies state)]
-    (assoc state :players (map #(step-player % (disj bodies' %)) (:players state)))))
+    (-> state
+        (assoc :players (map #(step-player % (disj bodies' %)) (:players state)))
+        ((fn [state]
+           (let [projectiles (generate-projectiles (:players state))]
+             (-> state
+                 (update :projectiles (partial concat (vals projectiles)))
+                 (update :players
+                         (partial map (fn [player]
+                                        (if (contains? projectiles player)
+                                          (assoc-in player [:weapon :last-shot] (now))
+                                          player))))))))
+        (update :projectiles (partial step-projectiles (bodies state))))))
 
 (defn fill-block [color block]
   (set! (.-fillStyle screen) color)
@@ -164,32 +228,21 @@
                (+ (:x block) 0.5) (+ (:y block) 0.5)
                (- grid 1) (- grid 1)))
 
-(defn to-grid
-  [grid n]
-  (- n (mod n grid)))
-
 (defn view-offset
   [obj]
   {:x (- (- (:x obj) (/ (:x screen-size) 2)))
    :y (- (- (:y obj) (/ (:y screen-size) 2)))})
 
-(defmulti draw-crosshair (fn [player walls] (get-in player [:crosshair :type])))
-
-(defmethod draw-crosshair :rifle [player other-bodies]
-  (let [crosshair-pos (-> (angle-to-vector (get-in player [:crosshair :angle])
-                                           (magnitude screen-size))
-                          (update :x #((partial to-grid grid) (+ % (:x player))))
-                          (update :y #((partial to-grid grid) (+ % (:y player)))))
-        los (line-of-sight player crosshair-pos other-bodies)]
-
+(defn draw-crosshair [player other-bodies]
+  (let [los (line-of-sight player (crosshair-position player) other-bodies player)]
     (fill-block (:color player) player)
-    (dorun (map (partial fill-block (get-in player [:crosshair :color])) los))))
+    (dorun (map (partial fill-block (get-in player [:weapon :color])) los))))
 
 (defn draw [state]
   (let [players (:players state)
         player-to-center-on (nth players 0)
         view-offset' (view-offset player-to-center-on)
-        crosshair (get-in state [:player :crosshair])
+        weapon (get-in state [:player :weapon])
         on-screen-bodies (filter (partial on-screen? player-to-center-on) (bodies state))]
 
     ;; center on player
@@ -212,6 +265,10 @@
     (dorun (map #(fill-block (:color %) %) players))
     (draw-crosshair player-to-center-on (disj (set on-screen-bodies) player-to-center-on))
 
+    ;; draw projectiles
+    (dorun (map (partial fill-block "yellow")
+                (filter (partial on-screen? player-to-center-on) (:projectiles state))))
+
     ;; center back on origin
     (.restore screen)))
 
@@ -222,11 +279,12 @@
    (fn []
      (let [new-state (step state)]
        (draw new-state)
-       (tick new-state)))))
+       (tick new-state)
+       (unpress-keys)))))
 
 (defn make-walls
   []
-  (let [d 300]
+  (let [d level-dimensions]
     (concat
      ;; pillars
      [{:x 70 :y 70} {:x 80 :y 70} {:x 70 :y 80} {:x 80 :y 80}
@@ -246,32 +304,42 @@
    :move-every 200
    :color color
    :action-to-key-code key-map
-   :weapon :rifle
-   :crosshair {:type :rifle
-               :x (+ x grid)
-               :y (+ x grid)
-               :last-move 0
-               :move-every 0
-               :color crosshair-color}})
+   :weapon {:type :rifle
+            :x (+ x grid)
+            :y (+ x grid)
+            :last-move 0
+            :move-every 0
+            :last-shot 0
+            :shoot-every 100
+            :firing false
+            :color crosshair-color}})
 
 (defn keyboard-input-to-key-state []
   (events/listen window
                  (.-KEYUP events/EventType)
                  (fn [e]
                    (let [key-code (.-keyCode e)]
-                     (swap! key-state assoc key-code nil))))
+                     (swap! key-state
+                            assoc
+                            key-code
+                            {:down nil :pressed nil}))))
 
   (events/listen window
                  (.-KEYDOWN events/EventType)
                  (fn [e]
-                   (let [key-code (.-keyCode e)]
-                     (if (nil? (get @key-state key-code))
-                       (swap! key-state assoc key-code (now)))))))
+                   (let [key-code (.-keyCode e)
+                         now' (now)]
+                     (if (nil? (get-in @key-state [key-code :down]))
+                       (swap! key-state
+                              assoc
+                              key-code
+                              {:down now' :pressed now'}))))))
 
 ;; start
 
 (keyboard-input-to-key-state)
 (tick
  (-> {:players [(make-player 50 50 "red" "rgba(255, 0, 0, 0.5)" (:player-1-dvorak key-maps))
-                (make-player 250 250 "blue" "rgba(0, 0, 255, 0.5)" (:player-2-dvorak key-maps))]}
+                (make-player 250 250 "blue" "rgba(0, 0, 255, 0.5)" (:player-2-dvorak key-maps))]
+      :projectiles []}
      (assoc :walls (make-walls))))
