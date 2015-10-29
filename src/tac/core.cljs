@@ -177,6 +177,10 @@
       (merge soldier new-pos {:last-move (now)})
       soldier)))
 
+(defn bodies
+  [state]
+  (set (concat (:walls state) (:soldiers state))))
+
 (defn generate-projectiles [soldiers]
   (->> soldiers
        (filter #(let [weapon (:weapon %)]
@@ -184,26 +188,17 @@
                        (passed (:last-shot weapon) (:shoot-every weapon)))))
        (reduce (fn [a soldier] (assoc a soldier (make-projectile soldier))) {})))
 
-(defn step-soldier
-  [soldier action->key-code other-bodies]
-  (-> soldier
-      (move-soldier other-bodies action->key-code)
-      (update :weapon (partial update-firing-status action->key-code))
-      (update :weapon (partial move-rifle action->key-code))))
-
-(defn step-projectiles
-  [bodies projectiles]
-  (->> projectiles
-       (filter #(not-any? (partial colliding? %) bodies))
-       (map (fn [projectile]
-              (if (not (moved-too-recently? projectile))
-                (let [[new-pos & line-tail] (:path projectile)]
-                  (merge projectile new-pos {:path line-tail}))
-                projectile)))))
-
-(defn bodies
-  [state]
-  (set (concat (:walls state) (:soldiers state))))
+(defn step-projectile-movement
+  [{projectiles :projectiles :as state}]
+  (let [bodies' (bodies state)]
+    (assoc state :projectiles
+           (->> projectiles
+                (filter #(not-any? (partial colliding? %) bodies'))
+                (map (fn [projectile]
+                       (if (not (moved-too-recently? projectile))
+                         (let [[new-pos & line-tail] (:path projectile)]
+                           (merge projectile new-pos {:path line-tail}))
+                         projectile)))))))
 
 (defn line-of-sight [a b bodies screen-center]
   (take-while (fn [point] (and (on-screen? screen-center point)
@@ -236,13 +231,13 @@
                                     (assoc (get @key-state key-code) :pressed nil)))
               (keys @key-state))))
 
-(defn soldier->key-map
+(defn soldier-to-key-map
   [soldier players]
   (some (fn [player] (if (= (:player-id player) (:player-id soldier))
                        (:action->key-code player)))
         players))
 
-(defn current-soldier
+(defn player-current-soldier
   [soldiers {player-id :player-id current-soldier-id :current-soldier-id}]
   (some #(if (and (= player-id (:player-id %))
                   (= current-soldier-id (get-in % [:weapon :type])))
@@ -253,25 +248,58 @@
   [soldiers {player-id :player-id}]
   (filter #(= player-id (:player-id %)) soldiers))
 
-(defn step [state]
-  (let [bodies' (bodies state)
-        current-soldiers (map (partial current-soldier (:soldiers state))
-                              (:players state))]
+(defn other-soldier-id
+  [soldiers {player-id :player-id current-soldier-id :current-soldier-id}]
+  (let [player-soldier-types (map #(get-in % [:weapon :type])
+                                  (player-soldiers soldiers player-id))]
+    (first (set/difference (set player-soldier-types)
+                           #{current-soldier-id}))))
+
+;; (defn handle-switching
+;;   [{players :players :as state}]
+;;   (assoc state :players
+;;          (map (fn [{player-id :player-id action->key-code :action->key-code
+;;                     current-soldier-id :current-soldier-id :as player}]
+;;                 (if (contains? (active-keys (set/map-invert action->key-code) :pressed) :switch)
+;;                   (assoc player :current-soldier-id
+;;                          (other-soldier-id (:soldiers state) player)))
+;;                 player)
+;;               players)))
+
+(defn step-soldiers
+  [{players :players :as state}]
+  (let [bodies (bodies state)
+        current-soldiers (set (map (partial player-current-soldier (:soldiers state))
+                                   (:players state)))]
+    (assoc state :soldiers
+           (map (fn [soldier]
+                  (if (contains? current-soldiers soldier)
+                    (let [action->key-code (soldier-to-key-map soldier players)
+                          other-bodies (disj bodies soldier)]
+                      (-> soldier
+                          (move-soldier other-bodies action->key-code)
+                          (update :weapon (partial update-firing-status action->key-code))
+                          (update :weapon (partial move-rifle action->key-code))))
+                    soldier))
+                (:soldiers state)))))
+
+(defn step-projectile-generation
+  [state]
+  (let [projectiles (generate-projectiles (:soldiers state))]
     (-> state
-        (assoc :soldiers (map #(step-soldier %
-                                             (soldier->key-map % (:players state))
-                                             (disj bodies' %))
-                              current-soldiers))
-        ((fn [state]
-           (let [projectiles (generate-projectiles (:soldiers state))]
-             (-> state
-                 (update :projectiles (partial concat (vals projectiles)))
-                 (update :soldiers
-                         (partial map (fn [soldier]
-                                        (if (contains? projectiles soldier)
-                                          (assoc-in soldier [:weapon :last-shot] (now))
-                                          soldier))))))))
-        (update :projectiles (partial step-projectiles (bodies state))))))
+        (update :projectiles (partial concat (vals projectiles)))
+        (update :soldiers
+                (partial map (fn [soldier]
+                               (if (contains? projectiles soldier)
+                                 (assoc-in soldier [:weapon :last-shot] (now))
+                                 soldier)))))))
+
+(defn step [state]
+  (-> state
+      ;; (handle-switching)
+      (step-soldiers)
+      (step-projectile-generation)
+      (step-projectile-movement)))
 
 (defn fill-block [color block]
   (set! (.-fillStyle screen) color)
@@ -296,9 +324,10 @@
 (defn draw [state]
   (let [local-player (nth (:players state) 0)
         remote-player (nth (:players state) 1)
-        current-soldier' (current-soldier (:soldiers state) local-player)
-        view-offset' (view-offset current-soldier')
-        on-screen-bodies (filter (partial on-screen? current-soldier') (bodies state))]
+        current-soldier (player-current-soldier (:soldiers state) local-player)
+        view-offset' (view-offset current-soldier)
+        on-screen-bodies (filter (partial on-screen? current-soldier) (bodies state))]
+
     ;; center on player
     (.save screen)
     (.translate screen (:x view-offset') (:y view-offset'))
@@ -306,27 +335,27 @@
     ;; clear screen
     (set! (.-fillStyle screen) "black")
     (.fillRect screen
-               (- (:x current-soldier') (/ (:x screen-size) 2))
-               (- (:y current-soldier') (/ (:y screen-size) 2))
+               (- (:x current-soldier) (/ (:x screen-size) 2))
+               (- (:y current-soldier) (/ (:y screen-size) 2))
                (:x screen-size)
                (:y screen-size))
 
     ;; draw walls
     (dorun (map (partial fill-block "white")
-                (filter (partial on-screen? current-soldier') (:walls state))))
+                (filter (partial on-screen? current-soldier) (:walls state))))
 
     ;; draw local soldiers
     (dorun (map #(fill-block (:color %) %) (player-soldiers (:soldiers state) local-player)))
-    (draw-crosshair current-soldier' (disj (set on-screen-bodies) current-soldier'))
+    (draw-crosshair current-soldier (disj (set on-screen-bodies) current-soldier))
 
     ;; draw remote soldiers
     (dorun (map #(fill-block (:color %) %)
-                (filter #(visible? current-soldier' % on-screen-bodies)
+                (filter #(visible? current-soldier % on-screen-bodies)
                         (player-soldiers (:soldiers state) remote-player))))
 
     ;; draw projectiles
     (dorun (map (partial fill-block "yellow")
-                (filter (partial on-screen? current-soldier') (:projectiles state))))
+                (filter (partial on-screen? current-soldier) (:projectiles state))))
 
     ;; center back on origin
     (.restore screen)))
