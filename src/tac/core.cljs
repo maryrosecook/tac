@@ -208,12 +208,18 @@
   (let [bodies' (bodies state)]
     (assoc state :projectiles
            (->> projectiles
-                (filter #(not-any? (partial colliding? %) bodies'))
                 (map (fn [projectile]
                        (if (not (moved-too-recently? projectile))
                          (let [[new-pos & line-tail] (:path projectile)]
                            (merge projectile new-pos {:path line-tail}))
                          projectile)))))))
+
+(defn step-projectile-destruction
+  [{:keys [projectiles soldiers] :as state}]
+  (let [bodies' (bodies state)]
+    (-> state
+        (assoc :soldiers (filter #(not-any? (partial colliding? %) projectiles) soldiers))
+        (assoc :projectiles (filter #(not-any? (partial colliding? %) bodies') projectiles)))))
 
 (defn line-of-sight [a b bodies screen-center]
   (take-while (fn [point] (and (on-screen? screen-center point)
@@ -313,7 +319,8 @@
       (handle-switching)
       (step-soldiers)
       (step-projectile-generation)
-      (step-projectile-movement)))
+      (step-projectile-movement)
+      (step-projectile-destruction)))
 
 (defn fill-block [color block]
   (set! (.-fillStyle screen) color)
