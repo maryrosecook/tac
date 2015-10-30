@@ -135,9 +135,24 @@
       (update :x #((partial ->grid grid) (+ % (:x soldier))))
       (update :y #((partial ->grid grid) (+ % (:y soldier))))))
 
+(defmethod crosshair-position :mortar [soldier]
+  (-> (angle->vector (get-in soldier [:weapon :angle])
+                     (magnitude {:x level-dimensions :y level-dimensions}))
+      (update :x #((partial ->grid grid) (+ % (:x soldier))))
+      (update :y #((partial ->grid grid) (+ % (:y soldier))))))
+
 (defmulti make-projectile (fn [player] (get-in player [:weapon :type])))
 
 (defmethod make-projectile :rifle
+  [player]
+  (let [[start & path] (rest (bresenham-line player (crosshair-position player)))]
+    (merge start
+           {:type :bullet
+            :last-move 0
+            :move-every 100
+            :path path})))
+
+(defmethod make-projectile :mortar
   [player]
   (let [[start & path] (rest (bresenham-line player (crosshair-position player)))]
     (merge start
@@ -248,23 +263,22 @@
   [soldiers {player-id :player-id}]
   (filter #(= player-id (:player-id %)) soldiers))
 
-(defn other-soldier-id
-  [soldiers {player-id :player-id current-soldier-id :current-soldier-id}]
-  (let [player-soldier-types (map #(get-in % [:weapon :type])
-                                  (player-soldiers soldiers player-id))]
-    (first (set/difference (set player-soldier-types)
-                           #{current-soldier-id}))))
+(defn other-soldier
+  [soldiers player]
+  (first (set/difference (set (player-soldiers soldiers player))
+                         #{(player-current-soldier soldiers player)})))
 
-;; (defn handle-switching
-;;   [{players :players :as state}]
-;;   (assoc state :players
-;;          (map (fn [{player-id :player-id action->key-code :action->key-code
-;;                     current-soldier-id :current-soldier-id :as player}]
-;;                 (if (contains? (active-keys (set/map-invert action->key-code) :pressed) :switch)
-;;                   (assoc player :current-soldier-id
-;;                          (other-soldier-id (:soldiers state) player)))
-;;                 player)
-;;               players)))
+(defn handle-switching
+  [{players :players :as state}]
+  (assoc state :players
+         (map (fn [{player-id :player-id action->key-code :action->key-code :as player}]
+                (if (and (contains? (active-keys (set/map-invert action->key-code) :pressed)
+                                    :switch)
+                         (other-soldier (:soldiers state) player))
+                  (assoc player :current-soldier-id
+                         (get-in (other-soldier (:soldiers state) player) [:weapon :type]))
+                  player))
+              players)))
 
 (defn step-soldiers
   [{players :players :as state}]
@@ -296,7 +310,7 @@
 
 (defn step [state]
   (-> state
-      ;; (handle-switching)
+      (handle-switching)
       (step-soldiers)
       (step-projectile-generation)
       (step-projectile-movement)))
@@ -410,6 +424,24 @@
             :firing false
             :color crosshair-color}})
 
+(defmethod make-soldier :mortar
+  [type player-id x y color crosshair-color]
+  {:x x
+   :y y
+   :player-id player-id
+   :last-move 0
+   :move-every 200
+   :color color
+   :weapon {:type type
+            :x (+ x grid)
+            :y (+ x grid)
+            :last-move 0
+            :move-every 0
+            :last-shot 0
+            :shoot-every 200
+            :firing false
+            :color crosshair-color}})
+
 (defn keyboard-input->key-state []
   (events/listen window
                  (.-KEYUP events/EventType)
@@ -437,7 +469,8 @@
 (tick
  (-> {:players [(make-player :red (:player-1-dvorak key-maps))
                 (make-player :blue (:player-2-dvorak key-maps))]
-      :soldiers [(make-soldier :rifle :red 50 50 "red" "rgba(255, 0, 0, 0.5)")
+      :soldiers [(make-soldier :rifle :red 30 30 "red" "rgba(255, 0, 0, 0.5)")
+                 (make-soldier :mortar :red 50 50 "red" "rgba(255, 0, 0, 0.5)")
                  (make-soldier :rifle :blue 250 250 "blue" "rgba(0, 0, 255, 0.5)")]
       :projectiles []}
      (assoc :walls (make-walls))))
