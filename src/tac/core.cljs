@@ -469,8 +469,29 @@
 (tick
  (-> {:players [(make-player :red (:player-1-dvorak key-maps))
                 (make-player :blue (:player-2-dvorak key-maps))]
-      :soldiers [(make-soldier :rifle :red 30 30 "red" "rgba(255, 0, 0, 0.5)")
-                 (make-soldier :mortar :red 50 50 "red" "rgba(255, 0, 0, 0.5)")
-                 (make-soldier :rifle :blue 250 250 "blue" "rgba(0, 0, 255, 0.5)")]
+      :soldiers [(make-soldier :rifle
+                               :red
+                               30
+                               30
+                               "red"
+                               "rgba(255, 0, 0, 0.5)")
+                 (make-soldier :mortar
+                               :red
+                               50
+                               50
+                               "red"
+                               "rgba(255, 0, 0, 0.5)")
+                 (make-soldier :rifle
+                               :blue
+                               (- level-dimensions 30)
+                               (- level-dimensions 30)
+                               "blue"
+                               "rgba(0, 0, 255, 0.5)")
+                 (make-soldier :rifle
+                               :blue
+                               (- level-dimensions 50)
+                               (- level-dimensions 50)
+                               "blue"
+                               "rgba(0, 0, 255, 0.5)")]
       :projectiles []}
      (assoc :walls (make-walls))))
