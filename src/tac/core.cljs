@@ -427,7 +427,7 @@
             :last-move 0
             :move-every 0
             :last-shot 0
-            :shoot-every 200
+            :shoot-every 1000
             :firing false
             :color crosshair-color}})
 
@@ -445,7 +445,7 @@
             :last-move 0
             :move-every 0
             :last-shot 0
-            :shoot-every 200
+            :shoot-every 1000
             :firing false
             :color crosshair-color}})
 
