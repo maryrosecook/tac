@@ -328,6 +328,7 @@
 
 (defn stroke-block [color block]
   (set! (.-strokeStyle screen) color)
+  (set! (.-lineWidth screen) 1.5)
   (.strokeRect screen
                (+ (:x block) 0.5) (+ (:y block) 0.5)
                (- grid 1) (- grid 1)))
@@ -341,6 +342,17 @@
   (let [los (line-of-sight soldier (crosshair-position soldier) other-bodies soldier)]
     (fill-block (:color soldier) soldier)
     (dorun (map (partial fill-block (get-in soldier [:weapon :color])) los))))
+
+(defn draw-local-soldiers
+  [soldiers player on-screen-bodies]
+  (let [player-soldiers' (player-soldiers soldiers player)]
+    (dorun (map (fn [{{:keys [firing type]} :weapon :as soldier}]
+                  (fill-block "red" soldier)
+                  (if (= type (:current-soldier-id player))
+                    (draw-crosshair soldier (disj (set on-screen-bodies) soldier)))
+                  (if firing
+                    (stroke-block "yellow" soldier)))
+                soldiers))))
 
 (defn draw [state]
   (let [local-player (nth (:players state) 0)
@@ -366,8 +378,9 @@
                 (filter (partial on-screen? current-soldier) (:walls state))))
 
     ;; draw local soldiers
-    (dorun (map #(fill-block (:color %) %) (player-soldiers (:soldiers state) local-player)))
-    (draw-crosshair current-soldier (disj (set on-screen-bodies) current-soldier))
+    (draw-local-soldiers (player-soldiers (:soldiers state) local-player)
+                         local-player
+                         on-screen-bodies)
 
     ;; draw remote soldiers
     (dorun (map #(fill-block (:color %) %)
