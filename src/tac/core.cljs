@@ -435,8 +435,7 @@
    :move-every 200
    :color color
    :weapon {:type type
-            :x (+ x grid)
-            :y (+ x grid)
+            :angle 0
             :last-move 0
             :move-every 0
             :last-shot 0
@@ -453,8 +452,7 @@
    :move-every 200
    :color color
    :weapon {:type type
-            :x (+ x grid)
-            :y (+ x grid)
+            :angle 0
             :last-move 0
             :move-every 0
             :last-shot 0
