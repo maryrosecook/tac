@@ -13,7 +13,7 @@
 
 (def rifle-turn-speed 3)
 (def grid 10)
-(def level-dimensions 500)
+(def level-dimensions 700)
 (def screen (.getContext (.getElementById js/document "screen") "2d"))
 (def screen-size {:x (aget screen "canvas" "width")
                   :y (aget screen "canvas" "height")})
