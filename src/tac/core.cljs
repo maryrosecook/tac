@@ -11,7 +11,6 @@
   {:player-1-dvorak {:left 65 :right 69 :up 188 :down 79 :aim 16 :firing 85 :switch 73}
    :player-2-dvorak {:left 72 :right 78 :up 67 :down 84 :aim 18 :switch 16}})
 
-(def rifle-turn-speed 3)
 (def grid 10)
 (def level-dimensions 700)
 (def screen1 (.getContext (.getElementById js/document "screen1") "2d"))
@@ -164,7 +163,7 @@
         down-keys (active-keys key-code->action :down)
         direction (latest-key (select-keys down-keys [:left :right]))]
     (if direction
-      (+ angle (* (if (= direction :left) -1 1) rifle-turn-speed))
+      (+ angle (if (= direction :left) -1 1))
       angle)))
 
 (defmulti move-crosshair (fn [action->key-code soldier] (:type soldier)))
@@ -461,7 +460,7 @@
    :weapon {:type type
             :angle 0
             :last-move 0
-            :move-every 0
+            :move-every 10
             :last-shot 0
             :shoot-every 1000
             :firing false
