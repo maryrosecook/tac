@@ -212,6 +212,22 @@
                        (passed (:last-shot weapon) (:shoot-every weapon)))))
        (reduce (fn [a soldier] (assoc a soldier (make-projectile soldier))) {})))
 
+(defn player-current-soldier
+  [soldiers {player-id :player-id current-soldier-id :current-soldier-id}]
+  (some #(if (and (= player-id (:player-id %))
+                  (= current-soldier-id (get-in % [:weapon :type])))
+           %)
+        soldiers))
+
+(defn player-soldiers
+  [soldiers {player-id :player-id}]
+  (filter #(= player-id (:player-id %)) soldiers))
+
+(defn other-soldier
+  [soldiers player]
+  (first (set/difference (set (player-soldiers soldiers player))
+                         #{(player-current-soldier soldiers player)})))
+
 (defn step-projectile-movement
   [{projectiles :projectiles :as state}]
   (assoc state :projectiles
@@ -222,12 +238,24 @@
                          (merge projectile new-pos {:path line-tail}))
                        projectile))))))
 
+(defn maybe-switch-player-from-dead-soldier
+  [soldiers player]
+  (let [other-soldier' (other-soldier soldiers player)]
+    (if (and other-soldier'
+             (not (contains? (set (player-soldiers soldiers player))
+                             (player-current-soldier soldiers player))))
+      (assoc player :current-soldier-id (get-in other-soldier' [:weapon :type]))
+      player)))
+
 (defn step-projectile-destruction
   [{:keys [projectiles soldiers] :as state}]
   (let [bodies' (bodies state)]
     (-> state
         (assoc :soldiers (filter #(not-any? (partial colliding? %) projectiles) soldiers))
-        (assoc :projectiles (filter #(not-any? (partial colliding? %) bodies') projectiles)))))
+        (assoc :projectiles (filter #(not-any? (partial colliding? %) bodies') projectiles))
+        ((fn [{:keys [soldiers players] :as state}]
+           (assoc state :players
+                  (map (partial maybe-switch-player-from-dead-soldier soldiers) players)))))))
 
 (defn line-of-sight [a b bodies screen-center]
   (take-while (fn [point] (and (on-screen? screen-center point)
@@ -265,22 +293,6 @@
   (some (fn [player] (if (= (:player-id player) (:player-id soldier))
                        (:action->key-code player)))
         players))
-
-(defn player-current-soldier
-  [soldiers {player-id :player-id current-soldier-id :current-soldier-id}]
-  (some #(if (and (= player-id (:player-id %))
-                  (= current-soldier-id (get-in % [:weapon :type])))
-           %)
-        soldiers))
-
-(defn player-soldiers
-  [soldiers {player-id :player-id}]
-  (filter #(= player-id (:player-id %)) soldiers))
-
-(defn other-soldier
-  [soldiers player]
-  (first (set/difference (set (player-soldiers soldiers player))
-                         #{(player-current-soldier soldiers player)})))
 
 (defn handle-switching
   [{players :players :as state}]
