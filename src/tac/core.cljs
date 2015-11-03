@@ -14,9 +14,10 @@
 (def rifle-turn-speed 3)
 (def grid 10)
 (def level-dimensions 700)
-(def screen (.getContext (.getElementById js/document "screen") "2d"))
-(def screen-size {:x (aget screen "canvas" "width")
-                  :y (aget screen "canvas" "height")})
+(def screen1 (.getContext (.getElementById js/document "screen1") "2d"))
+(def screen2 (.getContext (.getElementById js/document "screen2") "2d"))
+(def screen-size {:x (aget screen1 "canvas" "width")
+                  :y (aget screen1 "canvas" "height")})
 (def window (dom/getWindow))
 (def key-state (atom {}))
 
@@ -322,11 +323,11 @@
       (step-projectile-movement)
       (step-projectile-destruction)))
 
-(defn fill-block [color block]
+(defn fill-block [screen color block]
   (set! (.-fillStyle screen) color)
   (.fillRect screen (:x block) (:y block) grid grid))
 
-(defn stroke-block [color block]
+(defn stroke-block [screen color block]
   (set! (.-strokeStyle screen) color)
   (set! (.-lineWidth screen) 1.5)
   (.strokeRect screen
@@ -338,26 +339,25 @@
   {:x (- (- (:x obj) (/ (:x screen-size) 2)))
    :y (- (- (:y obj) (/ (:y screen-size) 2)))})
 
-(defn draw-crosshair [soldier other-bodies]
+(defn draw-crosshair [screen soldier other-bodies]
   (let [los (line-of-sight soldier (crosshair-position soldier) other-bodies soldier)]
-    (fill-block (:color soldier) soldier)
-    (dorun (map (partial fill-block (get-in soldier [:weapon :color])) los))))
+    (fill-block screen (:color soldier) soldier)
+    (dorun (map (partial fill-block screen (get-in soldier [:weapon :color])) los))))
 
 (defn draw-local-soldiers
-  [soldiers player on-screen-bodies]
+  [screen soldiers player on-screen-bodies]
   (let [player-soldiers' (player-soldiers soldiers player)]
     (dorun (map (fn [{{:keys [firing type]} :weapon :as soldier}]
-                  (fill-block "red" soldier)
+                  (fill-block screen "red" soldier)
                   (if (= type (:current-soldier-id player))
-                    (draw-crosshair soldier (disj (set on-screen-bodies) soldier)))
+                    (draw-crosshair screen soldier (disj (set on-screen-bodies) soldier)))
                   (if firing
-                    (stroke-block "yellow" soldier)))
+                    (stroke-block screen "yellow" soldier)))
                 soldiers))))
 
-(defn draw [state]
-  (let [local-player (nth (:players state) 0)
-        remote-player (nth (:players state) 1)
-        current-soldier (player-current-soldier (:soldiers state) local-player)
+(defn draw-screen
+  [state screen local-player remote-player]
+  (let [current-soldier (player-current-soldier (:soldiers state) local-player)
         view-offset' (view-offset current-soldier)
         on-screen-bodies (filter (partial on-screen? current-soldier) (bodies state))]
 
@@ -374,25 +374,33 @@
                (:y screen-size))
 
     ;; draw walls
-    (dorun (map (partial fill-block "white")
+    (dorun (map (partial fill-block screen "white")
                 (filter (partial on-screen? current-soldier) (:walls state))))
 
     ;; draw local soldiers
-    (draw-local-soldiers (player-soldiers (:soldiers state) local-player)
+    (draw-local-soldiers screen
+                         (player-soldiers (:soldiers state) local-player)
                          local-player
                          on-screen-bodies)
 
     ;; draw remote soldiers
-    (dorun (map #(fill-block (:color %) %)
+    (dorun (map #(fill-block screen (:color %) %)
                 (filter #(visible? current-soldier % on-screen-bodies)
                         (player-soldiers (:soldiers state) remote-player))))
 
     ;; draw projectiles
-    (dorun (map (partial fill-block "yellow")
+    (dorun (map (partial fill-block screen "yellow")
                 (filter (partial on-screen? current-soldier) (:projectiles state))))
 
     ;; center back on origin
     (.restore screen)))
+
+(defn draw
+  [state]
+  (let [player1 (nth (:players state) 0)
+        player2 (nth (:players state) 1)]
+    (draw-screen state screen1 player1 player2)
+    (draw-screen state screen2 player2 player1)))
 
 (defn tick [state]
   "Schedules next step and draw"
