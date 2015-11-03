@@ -478,7 +478,7 @@
             :x (+ x grid)
             :y (+ y grid)
             :last-move 0
-            :move-every 0
+            :move-every 100
             :last-shot 0
             :shoot-every 1000
             :firing false
