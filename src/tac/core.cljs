@@ -447,42 +447,36 @@
    :action->key-code action->key-code
    :current-soldier-id :rifle})
 
-(defmulti make-soldier (fn [type & rest] type))
+(defn make-soldier
+  [player-id pos color weapon]
+  (merge pos {:player-id player-id
+              :last-move 0
+              :move-every 200
+              :color color
+              :weapon weapon}))
 
-(defmethod make-soldier :rifle
-  [type player-id x y color crosshair-color]
-  {:x x
-   :y y
-   :player-id player-id
-   :last-move 0
-   :move-every 200
-   :color color
-   :weapon {:type type
-            :angle 0
-            :last-move 0
-            :move-every 10
-            :last-shot 0
-            :shoot-every 1000
-            :firing false
-            :color crosshair-color}})
+(defmulti make-weapon (fn [type & rest] type))
 
-(defmethod make-soldier :mortar
-  [type player-id x y color crosshair-color]
-  {:x x
-   :y y
-   :player-id player-id
-   :last-move 0
-   :move-every 200
-   :color color
-   :weapon {:type type
-            :x (+ x grid)
-            :y (+ y grid)
-            :last-move 0
-            :move-every 100
-            :last-shot 0
-            :shoot-every 1000
-            :firing false
-            :color crosshair-color}})
+(defmethod make-weapon :rifle
+  [type color]
+   {:type type
+    :angle 0
+    :last-move 0
+    :move-every 10
+    :last-shot 0
+    :shoot-every 1000
+    :firing false
+    :color color})
+
+(defmethod make-weapon :mortar
+  [type pos color]
+  (merge pos {:type type
+              :last-move 0
+              :move-every 100
+              :last-shot 0
+              :shoot-every 1000
+              :firing false
+              :color color}))
 
 (defn keyboard-input->key-state []
   (events/listen window
@@ -508,32 +502,36 @@
 ;; start
 
 (keyboard-input->key-state)
-(tick
- (-> {:players [(make-player :red (:player-1-dvorak key-maps))
-                (make-player :blue (:player-2-dvorak key-maps))]
-      :soldiers [(make-soldier :rifle
-                               :red
-                               30
-                               30
-                               "red"
-                               "rgba(255, 0, 0, 0.5)")
-                 (make-soldier :mortar
-                               :red
-                               50
-                               50
-                               "red"
-                               "rgba(255, 0, 0, 0.5)")
-                 (make-soldier :rifle
-                               :blue
-                               (- level-dimensions 30)
-                               (- level-dimensions 30)
-                               "blue"
-                               "rgba(0, 0, 255, 0.5)")
-                 (make-soldier :rifle
-                               :blue
-                               (- level-dimensions 50)
-                               (- level-dimensions 50)
-                               "blue"
-                               "rgba(0, 0, 255, 0.5)")]
-      :projectiles []}
-     (assoc :walls (make-walls))))
+(let [player1-rifle-pos {:x 30 :y 30}
+      player1-mortar-pos {:x 50 :y 50}
+      player2-rifle-pos {:x (- level-dimensions 30) :y (- level-dimensions 30)}
+      player2-mortar-pos {:x (- level-dimensions 50) :y (- level-dimensions 50)}]
+  (tick
+   (-> {:players [(make-player :red (:player-1-dvorak key-maps))
+                  (make-player :blue (:player-2-dvorak key-maps))]
+        :soldiers [
+                   (make-soldier :red
+                                 player1-rifle-pos
+                                 "red"
+                                 (make-weapon :rifle
+                                              "rgba(255, 0, 0, 0.5)"))
+                   (make-soldier :red
+                                 player1-mortar-pos
+                                 "red"
+                                 (make-weapon :mortar
+                                              {:x (+ (:x player1-mortar-pos) grid)
+                                               :y (+ (:y player1-mortar-pos) grid)}
+                                              "rgba(255, 0, 0, 0.5)"))
+                   (make-soldier :blue
+                                 player2-rifle-pos
+                                 "blue"
+                                 (make-weapon :rifle "rgba(0, 0, 255, 0.5)"))
+                   (make-soldier :blue
+                                 player2-mortar-pos
+                                 "blue"
+                                 (make-weapon :mortar
+                                              {:x (- (:x player2-mortar-pos) (* grid 2))
+                                               :y (- (:y player2-mortar-pos) (* grid 2))}
+                                              "rgba(0, 0, 255, 0.5)"))]
+        :projectiles []}
+       (assoc :walls (make-walls)))))
