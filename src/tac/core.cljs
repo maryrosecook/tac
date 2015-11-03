@@ -431,9 +431,15 @@
   []
   (let [d level-dimensions]
     (concat
-     ;; pillars
-     [{:x 70 :y 70} {:x 80 :y 70} {:x 70 :y 80} {:x 80 :y 80}
-      {:x 150 :y 150} {:x 160 :y 150} {:x 150 :y 160} {:x 160 :y 160}]
+     [;; top left barrier
+      {:x 40 :y 100} {:x 50 :y 100} {:x 60 :y 100} {:x 70 :y 100} {:x 80 :y 100} {:x 90 :y 100}
+      {:x 100 :y 40} {:x 100 :y 50} {:x 100 :y 60} {:x 100 :y 70} {:x 100 :y 80} {:x 100 :y 90}
+      {:x 100 :y 100}
+
+      ;; bottom right barrier
+      {:x 400 :y 400} {:x 410 :y 400} {:x 420 :y 400} {:x 430 :y 400} {:x 440 :y 400}
+      {:x 450 :y 400}
+      {:x 400 :y 410} {:x 400 :y 420} {:x 400 :y 430} {:x 400 :y 440} {:x 400 :y 450}]
 
      ;; border walls
      (map #(hash-map :x %          :y 0)          (range 0 (- d grid) grid))
