@@ -137,16 +137,13 @@
       (update :y #((partial ->grid grid) (+ % (:y soldier))))))
 
 (defmethod crosshair-position :mortar [soldier]
-  (-> (angle->vector (get-in soldier [:weapon :angle])
-                     (magnitude {:x level-dimensions :y level-dimensions}))
-      (update :x #((partial ->grid grid) (+ % (:x soldier))))
-      (update :y #((partial ->grid grid) (+ % (:y soldier))))))
+  (get-in soldier [:weapon]))
 
-(defmulti make-projectile (fn [player] (get-in player [:weapon :type])))
+(defmulti make-projectile (fn [soldier] (get-in soldier [:weapon :type])))
 
 (defmethod make-projectile :rifle
-  [player]
-  (let [[start & path] (rest (bresenham-line player (crosshair-position player)))]
+  [soldier]
+  (let [[start & path] (rest (bresenham-line soldier (crosshair-position soldier)))]
     (merge start
            {:type :bullet
             :last-move 0
@@ -154,10 +151,10 @@
             :path path})))
 
 (defmethod make-projectile :mortar
-  [player]
-  (let [[start & path] (rest (bresenham-line player (crosshair-position player)))]
+  [soldier]
+  (let [[start & path] (rest (bresenham-line soldier (crosshair-position soldier)))]
     (merge start
-           {:type :bullet
+           {:type :bomb
             :last-move 0
             :move-every 100
             :path path})))
@@ -170,12 +167,24 @@
       (+ angle (* (if (= direction :left) -1 1) rifle-turn-speed))
       angle)))
 
-(defn move-rifle [action->key-code weapon]
+(defmulti move-crosshair (fn [action->key-code soldier] (:type soldier)))
+
+(defmethod move-crosshair :rifle
+  [action->key-code weapon]
   (let [angle (new-rotating-aim-angle (:angle weapon) action->key-code)]
     (if (and (not (moved-too-recently? weapon))
              (get-in @key-state [(:aim action->key-code) :down])
              (not= angle (:angle weapon)))
       (merge weapon {:angle angle :last-move (now)})
+      weapon)))
+
+(defmethod move-crosshair :mortar
+  [action->key-code weapon]
+  (let [new-pos (new-player-controlled-object-pos weapon action->key-code)]
+    (if (and (not (moved-too-recently? weapon))
+             (get-in @key-state [(:aim action->key-code) :down])
+             (not= new-pos (select-keys weapon [:x :y])))
+      (merge weapon new-pos {:last-move (now)})
       weapon)))
 
 (defn update-firing-status [action->key-code weapon]
@@ -195,7 +204,7 @@
 
 (defn bodies
   [state]
-  (set (concat (:walls state) (:soldiers state))))
+  (concat (:walls state) (:soldiers state)))
 
 (defn generate-projectiles [soldiers]
   (->> soldiers
@@ -206,14 +215,13 @@
 
 (defn step-projectile-movement
   [{projectiles :projectiles :as state}]
-  (let [bodies' (bodies state)]
-    (assoc state :projectiles
-           (->> projectiles
-                (map (fn [projectile]
-                       (if (not (moved-too-recently? projectile))
-                         (let [[new-pos & line-tail] (:path projectile)]
-                           (merge projectile new-pos {:path line-tail}))
-                         projectile)))))))
+  (assoc state :projectiles
+         (->> projectiles
+              (map (fn [projectile]
+                     (if (not (moved-too-recently? projectile))
+                       (let [[new-pos & line-tail] (:path projectile)]
+                         (merge projectile new-pos {:path line-tail}))
+                       projectile))))))
 
 (defn step-projectile-destruction
   [{:keys [projectiles soldiers] :as state}]
@@ -289,18 +297,17 @@
 
 (defn step-soldiers
   [{players :players :as state}]
-  (let [bodies (bodies state)
+  (let [bodies' (bodies state)
         current-soldiers (set (map (partial player-current-soldier (:soldiers state))
                                    (:players state)))]
     (assoc state :soldiers
            (map (fn [soldier]
                   (if (contains? current-soldiers soldier)
-                    (let [action->key-code (soldier-to-key-map soldier players)
-                          other-bodies (disj bodies soldier)]
+                    (let [action->key-code (soldier-to-key-map soldier players)]
                       (-> soldier
-                          (move-soldier other-bodies action->key-code)
+                          (move-soldier bodies' action->key-code)
                           (update :weapon (partial update-firing-status action->key-code))
-                          (update :weapon (partial move-rifle action->key-code))))
+                          (update :weapon (partial move-crosshair action->key-code))))
                     soldier))
                 (:soldiers state)))))
 
@@ -339,18 +346,25 @@
   {:x (- (- (:x obj) (/ (:x screen-size) 2)))
    :y (- (- (:y obj) (/ (:y screen-size) 2)))})
 
-(defn draw-crosshair [screen soldier other-bodies]
+(defmulti draw-crosshair (fn [screen soldier other-bodies] (get-in soldier [:weapon :type])))
+
+(defmethod draw-crosshair :rifle [screen soldier other-bodies]
   (let [los (line-of-sight soldier (crosshair-position soldier) other-bodies soldier)]
     (fill-block screen (:color soldier) soldier)
     (dorun (map (partial fill-block screen (get-in soldier [:weapon :color])) los))))
+
+(defmethod draw-crosshair :mortar [screen soldier other-bodies]
+  (let [los (rest (bresenham-line soldier (crosshair-position soldier)))]
+    (fill-block screen (:color soldier) soldier)
+    (dorun (map (partial fill-block screen (get-in soldier [:weapon :color])) los))
+    (stroke-block screen (:color soldier) soldier)))
 
 (defn draw-local-soldiers
   [screen soldiers player on-screen-bodies]
   (let [player-soldiers' (player-soldiers soldiers player)]
     (dorun (map (fn [{{:keys [firing type]} :weapon :as soldier}]
                   (fill-block screen "red" soldier)
-                  (if (= type (:current-soldier-id player))
-                    (draw-crosshair screen soldier (disj (set on-screen-bodies) soldier)))
+                  (draw-crosshair screen soldier on-screen-bodies)
                   (if firing
                     (stroke-block screen "yellow" soldier)))
                 soldiers))))
@@ -385,7 +399,8 @@
 
     ;; draw remote soldiers
     (dorun (map #(fill-block screen (:color %) %)
-                (filter #(visible? current-soldier % on-screen-bodies)
+                (filter #(and (on-screen? current-soldier %)
+                              (visible? current-soldier % on-screen-bodies))
                         (player-soldiers (:soldiers state) remote-player))))
 
     ;; draw projectiles
@@ -460,7 +475,8 @@
    :move-every 200
    :color color
    :weapon {:type type
-            :angle 0
+            :x (+ x grid)
+            :y (+ y grid)
             :last-move 0
             :move-every 0
             :last-shot 0
