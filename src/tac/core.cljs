@@ -12,7 +12,7 @@
    :player-2-dvorak {:left 72 :right 78 :up 67 :down 84 :aim 18 :switch 16}})
 
 (def grid 10)
-(def level-dimensions 700)
+(def level-dimensions 500)
 (def screen1 (.getContext (.getElementById js/document "screen1") "2d"))
 (def screen2 (.getContext (.getElementById js/document "screen2") "2d"))
 (def screen-size {:x (aget screen1 "canvas" "width")
