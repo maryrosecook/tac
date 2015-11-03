@@ -354,10 +354,11 @@
     (dorun (map (partial fill-block screen (get-in soldier [:weapon :color])) los))))
 
 (defmethod draw-crosshair :mortar [screen soldier other-bodies]
-  (let [los (rest (bresenham-line soldier (crosshair-position soldier)))]
+  (let [crosshair-position' (crosshair-position soldier)
+        los (rest (bresenham-line soldier crosshair-position'))]
     (fill-block screen (:color soldier) soldier)
     (dorun (map (partial fill-block screen (get-in soldier [:weapon :color])) los))
-    (stroke-block screen (:color soldier) soldier)))
+    (stroke-block screen (:color soldier) crosshair-position')))
 
 (defn draw-local-soldiers
   [screen soldiers player on-screen-bodies]
