@@ -110,7 +110,9 @@
            (> (:y obj) (+ (:y screen-center) (/ (:y screen-size) 2))))))
 
 (defn colliding? [b1 b2]
-  (= (pos b1) (pos b2)))
+  (and (= (pos b1) (pos b2))
+       (not= (:type b1) :bomb)
+       (not= (:type b2) :bomb)))
 
 (defn angle->vector
   [angle radius]
