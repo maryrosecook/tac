@@ -9,7 +9,8 @@
 
 (def key-maps
   {:player-1-dvorak {:left 65 :right 69 :up 188 :down 79 :aim 16 :firing 85 :switch 73}
-   :player-2-dvorak {:left 72 :right 78 :up 67 :down 84 :aim 18 :firing 83 :switch 189}})
+   :player-2-dvorak {:left 72 :right 78 :up 67 :down 84 :aim 18 :firing 83 :switch 189}
+   :restart {:restart 32 }})
 
 (def grid 10)
 (def level-dimensions 500)
@@ -294,6 +295,99 @@
                        (:action->key-code player)))
         players))
 
+(defn make-walls
+  []
+  (let [d level-dimensions]
+    (concat
+     [;; top left barrier
+      {:x 40 :y 100} {:x 50 :y 100} {:x 60 :y 100} {:x 70 :y 100} {:x 80 :y 100} {:x 90 :y 100}
+      {:x 100 :y 40} {:x 100 :y 50} {:x 100 :y 60} {:x 100 :y 70} {:x 100 :y 80} {:x 100 :y 90}
+      {:x 100 :y 100}
+
+      ;; bottom right barrier
+      {:x 400 :y 400} {:x 410 :y 400} {:x 420 :y 400} {:x 430 :y 400} {:x 440 :y 400}
+      {:x 450 :y 400}
+      {:x 400 :y 410} {:x 400 :y 420} {:x 400 :y 430} {:x 400 :y 440} {:x 400 :y 450}]
+
+     ;; border walls
+     (map #(hash-map :x %          :y 0)          (range 0 (- d grid) grid))
+     (map #(hash-map :x (- d grid) :y %)          (range 0 (- d grid) grid))
+     (map #(hash-map :x %          :y (- d grid)) (range grid d grid))
+     (map #(hash-map :x 0          :y %)          (range grid d grid)))))
+
+(defn make-player
+  [player-id action->key-code]
+  {:player-id player-id
+   :action->key-code action->key-code
+   :current-soldier-id :rifle})
+
+(defn make-soldier
+  [player-id pos color weapon]
+  (merge pos {:player-id player-id
+              :last-move 0
+              :move-every 200
+              :color color
+              :weapon weapon}))
+
+(defmulti make-weapon (fn [type & rest] type))
+
+(defmethod make-weapon :rifle
+  [type color]
+   {:type type
+    :angle 0
+    :last-move 0
+    :move-every 10
+    :last-shot 0
+    :shoot-every 1000
+    :firing false
+    :color color})
+
+(defmethod make-weapon :mortar
+  [type pos color]
+  (merge pos {:type type
+              :last-move 0
+              :move-every 100
+              :last-shot 0
+              :shoot-every 1000
+              :firing false
+              :color color}))
+
+(defn make-game
+  []
+  (let [player1-rifle-pos {:x 30 :y 30}
+        player1-mortar-pos {:x 50 :y 50}
+        player2-rifle-pos {:x (- level-dimensions 30) :y (- level-dimensions 30)}
+        player2-mortar-pos {:x (- level-dimensions 50) :y (- level-dimensions 50)}]
+    (-> {:loser nil
+         :players [(make-player :red (:player-1-dvorak key-maps))
+                   (make-player :blue (:player-2-dvorak key-maps))]
+         :soldiers [
+                    (make-soldier :red
+                                  player1-rifle-pos
+                                  "red"
+                                  (make-weapon :rifle
+                                               "rgba(255, 0, 0, 0.5)"))
+                    (make-soldier :red
+                                  player1-mortar-pos
+                                  "red"
+                                  (make-weapon :mortar
+                                               {:x (+ (:x player1-mortar-pos) (* grid 2))
+                                                :y (+ (:y player1-mortar-pos) (* grid 2))}
+                                               "rgba(255, 0, 0, 0.5)"))
+                    (make-soldier :blue
+                                  player2-rifle-pos
+                                  "blue"
+                                  (make-weapon :rifle "rgba(0, 0, 255, 0.5)"))
+                    (make-soldier :blue
+                                  player2-mortar-pos
+                                  "blue"
+                                  (make-weapon :mortar
+                                               {:x (- (:x player2-mortar-pos) (* grid 2))
+                                                :y (- (:y player2-mortar-pos) (* grid 2))}
+                                               "rgba(0, 0, 255, 0.5)"))]
+         :projectiles []
+         :walls (make-walls)})))
+
 (defn handle-switching
   [{players :players :as state}]
   (assoc state :players
@@ -333,13 +427,36 @@
                                  (assoc-in soldier [:weapon :last-shot] (now))
                                  soldier)))))))
 
+(defn player-lost
+  [soldiers player]
+  (= (count (player-soldiers soldiers player)) 0))
+
+(defn step-loser
+  [{:keys [soldiers players] :as state}]
+  (assoc state :loser
+         (some (fn [player] (if (player-lost soldiers player)
+                              player))
+               players)))
+
+(defn step-restart-game
+  [state]
+  (let [space-key-pressed? (contains? (active-keys
+                                       (set/map-invert (:restart key-maps)) :pressed)
+                                      :restart)]
+    (if space-key-pressed?
+      (make-game)
+      state)))
+
 (defn step [state]
-  (-> state
-      (handle-switching)
-      (step-soldiers)
-      (step-projectile-generation)
-      (step-projectile-movement)
-      (step-projectile-destruction)))
+  (if (:loser state)
+    (step-restart-game state)
+    (-> state
+        (handle-switching)
+        (step-soldiers)
+        (step-projectile-generation)
+        (step-projectile-movement)
+        (step-projectile-destruction)
+        (step-loser))))
 
 (defn fill-block [screen color block]
   (set! (.-fillStyle screen) color)
@@ -422,12 +539,34 @@
     ;; center back on origin
     (.restore screen)))
 
+(defn draw-restart-screen
+  [state screen player]
+  (set! (.-fillStyle screen) "black")
+  (.fillRect screen  0 0 (:x screen-size) (:y screen-size))
+
+  (set! (.-textAlign screen) "center")
+  (set! (.-fillStyle screen) "white")
+  (.fillText screen
+             (if (= (:loser state) player) "You lost" "You won")
+             (/ (:x screen-size) 2)
+             (/ (:y screen-size) 2))
+
+  (.fillText screen
+             "Press SPACE to play again"
+             (/ (:x screen-size) 2)
+             (+ (/ (:y screen-size) 2) 20)))
+
 (defn draw
   [state]
   (let [player1 (nth (:players state) 0)
         player2 (nth (:players state) 1)]
-    (draw-screen state screen1 player1 player2)
-    (draw-screen state screen2 player2 player1)))
+    (if (:loser state)
+      (do
+        (draw-restart-screen state screen1 player1)
+        (draw-restart-screen state screen2 player2))
+      (do
+        (draw-screen state screen1 player1 player2)
+        (draw-screen state screen2 player2 player1)))))
 
 (defn tick [state]
   "Schedules next step and draw"
@@ -438,63 +577,6 @@
        (draw new-state)
        (tick new-state)
        (unpress-keys)))))
-
-(defn make-walls
-  []
-  (let [d level-dimensions]
-    (concat
-     [;; top left barrier
-      {:x 40 :y 100} {:x 50 :y 100} {:x 60 :y 100} {:x 70 :y 100} {:x 80 :y 100} {:x 90 :y 100}
-      {:x 100 :y 40} {:x 100 :y 50} {:x 100 :y 60} {:x 100 :y 70} {:x 100 :y 80} {:x 100 :y 90}
-      {:x 100 :y 100}
-
-      ;; bottom right barrier
-      {:x 400 :y 400} {:x 410 :y 400} {:x 420 :y 400} {:x 430 :y 400} {:x 440 :y 400}
-      {:x 450 :y 400}
-      {:x 400 :y 410} {:x 400 :y 420} {:x 400 :y 430} {:x 400 :y 440} {:x 400 :y 450}]
-
-     ;; border walls
-     (map #(hash-map :x %          :y 0)          (range 0 (- d grid) grid))
-     (map #(hash-map :x (- d grid) :y %)          (range 0 (- d grid) grid))
-     (map #(hash-map :x %          :y (- d grid)) (range grid d grid))
-     (map #(hash-map :x 0          :y %)          (range grid d grid)))))
-
-(defn make-player
-  [player-id action->key-code]
-  {:player-id player-id
-   :action->key-code action->key-code
-   :current-soldier-id :rifle})
-
-(defn make-soldier
-  [player-id pos color weapon]
-  (merge pos {:player-id player-id
-              :last-move 0
-              :move-every 200
-              :color color
-              :weapon weapon}))
-
-(defmulti make-weapon (fn [type & rest] type))
-
-(defmethod make-weapon :rifle
-  [type color]
-   {:type type
-    :angle 0
-    :last-move 0
-    :move-every 10
-    :last-shot 0
-    :shoot-every 1000
-    :firing false
-    :color color})
-
-(defmethod make-weapon :mortar
-  [type pos color]
-  (merge pos {:type type
-              :last-move 0
-              :move-every 100
-              :last-shot 0
-              :shoot-every 1000
-              :firing false
-              :color color}))
 
 (defn keyboard-input->key-state []
   (events/listen window
@@ -520,36 +602,4 @@
 ;; start
 
 (keyboard-input->key-state)
-(let [player1-rifle-pos {:x 30 :y 30}
-      player1-mortar-pos {:x 50 :y 50}
-      player2-rifle-pos {:x (- level-dimensions 30) :y (- level-dimensions 30)}
-      player2-mortar-pos {:x (- level-dimensions 50) :y (- level-dimensions 50)}]
-  (tick
-   (-> {:players [(make-player :red (:player-1-dvorak key-maps))
-                  (make-player :blue (:player-2-dvorak key-maps))]
-        :soldiers [
-                   (make-soldier :red
-                                 player1-rifle-pos
-                                 "red"
-                                 (make-weapon :rifle
-                                              "rgba(255, 0, 0, 0.5)"))
-                   (make-soldier :red
-                                 player1-mortar-pos
-                                 "red"
-                                 (make-weapon :mortar
-                                              {:x (+ (:x player1-mortar-pos) (* grid 2))
-                                               :y (+ (:y player1-mortar-pos) (* grid 2))}
-                                              "rgba(255, 0, 0, 0.5)"))
-                   (make-soldier :blue
-                                 player2-rifle-pos
-                                 "blue"
-                                 (make-weapon :rifle "rgba(0, 0, 255, 0.5)"))
-                   (make-soldier :blue
-                                 player2-mortar-pos
-                                 "blue"
-                                 (make-weapon :mortar
-                                              {:x (- (:x player2-mortar-pos) (* grid 2))
-                                               :y (- (:y player2-mortar-pos) (* grid 2))}
-                                              "rgba(0, 0, 255, 0.5)"))]
-        :projectiles []}
-       (assoc :walls (make-walls)))))
+(tick (make-game))
