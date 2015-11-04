@@ -232,14 +232,15 @@
                          #{(player-current-soldier soldiers player)})))
 
 (defn step-projectile-movement
-  [{projectiles :projectiles :as state}]
-  (assoc state :projectiles
-         (->> projectiles
-              (map (fn [projectile]
-                     (if (not (moved-too-recently? projectile))
-                       (let [[new-pos & line-tail] (:path projectile)]
-                         (merge projectile new-pos {:path line-tail}))
-                       projectile))))))
+  [state]
+  (-> state
+      (update :projectiles (partial filter (comp (complement empty?) :path)))
+      (update :projectiles
+              (partial map (fn [projectile]
+                             (if (not (moved-too-recently? projectile))
+                               (let [[new-pos & line-tail] (:path projectile)]
+                                 (merge projectile new-pos {:path line-tail}))
+                               projectile))))))
 
 (defn maybe-switch-player-from-dead-soldier
   [soldiers player]
@@ -250,7 +251,7 @@
       (assoc player :current-soldier-id (get-in other-soldier' [:weapon :type]))
       player)))
 
-(defn step-projectile-destruction
+(defn step-projectile-collisions
   [{:keys [projectiles soldiers] :as state}]
   (let [bodies' (bodies state)]
     (-> state
@@ -457,7 +458,7 @@
         (step-soldiers)
         (step-projectile-generation)
         (step-projectile-movement)
-        (step-projectile-destruction)
+        (step-projectile-collisions)
         (step-loser))))
 
 (defn fill-block [screen color block]
