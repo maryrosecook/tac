@@ -239,7 +239,7 @@
               (partial map (fn [projectile]
                              (if (not (moved-too-recently? projectile))
                                (let [[new-pos & line-tail] (:path projectile)]
-                                 (merge projectile new-pos {:path line-tail}))
+                                 (merge projectile new-pos {:path line-tail} {:last-move (now)}))
                                projectile))))))
 
 (defn maybe-switch-player-from-dead-soldier
