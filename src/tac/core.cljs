@@ -12,13 +12,17 @@
    :player-2-dvorak {:left 72 :right 78 :up 67 :down 84 :aim 18 :firing 83 :switch 189}
    :restart {:restart 32 }})
 
-(def grid 10)
-(def level-dimensions 500)
 (def screen1 (.getContext (.getElementById js/document "screen1") "2d"))
 (def screen2 (.getContext (.getElementById js/document "screen2") "2d"))
 (def screen-size {:x (aget screen1 "canvas" "width")
                   :y (aget screen1 "canvas" "height")})
 (def window (dom/getWindow))
+
+(def grid 10)
+(def level-dimensions 500)
+(def shrapnel-radius (* 5 grid))
+(def shrapnel-angle-delta 10)
+
 (def key-state (atom {}))
 
 (defn latest-key [key-state]
@@ -141,25 +145,24 @@
 (defmethod crosshair-position :mortar [soldier]
   (get-in soldier [:weapon]))
 
-(defmulti make-projectile (fn [soldier] (get-in soldier [:weapon :type])))
-
-(defmethod make-projectile :rifle
-  [soldier]
-  (let [[start & path] (rest (bresenham-line soldier (crosshair-position soldier)))]
-    (merge start
-           {:type :bullet
+(defn make-projectile-obj
+  [type path-from path-to]
+  (let [[pos & path] (bresenham-line path-from path-to)]
+    (merge pos
+           {:type type
             :last-move 0
-            :move-every 100
+            :move-every 50
             :path path})))
 
-(defmethod make-projectile :mortar
+(defmulti make-projectile-for-soldier (fn [soldier] (get-in soldier [:weapon :type])))
+
+(defmethod make-projectile-for-soldier :rifle
   [soldier]
-  (let [[start & path] (rest (bresenham-line soldier (crosshair-position soldier)))]
-    (merge start
-           {:type :bomb
-            :last-move 0
-            :move-every 100
-            :path path})))
+  (make-projectile-obj :bullet soldier (crosshair-position soldier)))
+
+(defmethod make-projectile-for-soldier :mortar
+  [soldier]
+  (make-projectile-obj :bomb soldier (crosshair-position soldier)))
 
 (defn new-rotating-aim-angle [angle action->key-code]
   (let [key-code->action (set/map-invert action->key-code)
@@ -213,7 +216,7 @@
        (filter #(let [weapon (:weapon %)]
                   (and (:firing weapon)
                        (passed (:last-shot weapon) (:shoot-every weapon)))))
-       (reduce (fn [a soldier] (assoc a soldier (make-projectile soldier))) {})))
+       (reduce (fn [a soldier] (assoc a soldier (make-projectile-for-soldier soldier))) {})))
 
 (defn player-current-soldier
   [soldiers {player-id :player-id current-soldier-id :current-soldier-id}]
@@ -231,10 +234,29 @@
   (first (set/difference (set (player-soldiers soldiers player))
                          #{(player-current-soldier soldiers player)})))
 
+(defn make-shrapnel
+  [bomb]
+  (map (fn [angle]
+         (let [shrapnel-end
+               (-> (angle->vector angle shrapnel-radius)
+                   (update :x #((partial ->grid grid) (+ % (:x bomb))))
+                   (update :y #((partial ->grid grid) (+ % (:y bomb)))))]
+           (make-projectile-obj :bullet bomb shrapnel-end)))
+       (range shrapnel-angle-delta 360 shrapnel-angle-delta)))
+
+(defn step-bomb-explosions
+  [{projectiles :projectiles :as state}]
+  (let [exploding-bombs (filter (fn [{:keys [type path]}]
+                                  (and (= type :bomb) (empty? path)))
+                                projectiles)
+        shrapnel (mapcat make-shrapnel exploding-bombs)]
+    (-> state
+        (update :projectiles (partial filter (comp (complement empty?) :path)))
+        (update :projectiles (partial concat shrapnel)))))
+
 (defn step-projectile-movement
   [state]
   (-> state
-      (update :projectiles (partial filter (comp (complement empty?) :path)))
       (update :projectiles
               (partial map (fn [projectile]
                              (if (not (moved-too-recently? projectile))
@@ -457,6 +479,7 @@
         (handle-switching)
         (step-soldiers)
         (step-projectile-generation)
+        (step-bomb-explosions)
         (step-projectile-movement)
         (step-projectile-collisions)
         (step-loser))))
