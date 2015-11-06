@@ -572,6 +572,7 @@
 
   (set! (.-textAlign screen) "center")
   (set! (.-fillStyle screen) "white")
+  (set! (.-font screen) "18px Courier")
   (.fillText screen
              (if (= (:loser state) player) "You lost" "You won")
              (/ (:x screen-size) 2)
@@ -580,7 +581,7 @@
   (.fillText screen
              "Press SPACE to play again"
              (/ (:x screen-size) 2)
-             (+ (/ (:y screen-size) 2) 20)))
+             (+ (/ (:y screen-size) 2) 25)))
 
 (defn draw
   [state]
