@@ -151,7 +151,7 @@
     (merge pos
            {:type type
             :last-move 0
-            :move-every 50
+            :move-every 30
             :path path})))
 
 (defmulti make-projectile-for-soldier (fn [soldier] (get-in soldier [:weapon :type])))
