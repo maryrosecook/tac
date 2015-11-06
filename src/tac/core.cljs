@@ -449,7 +449,21 @@
         (update :soldiers
                 (partial map (fn [soldier]
                                (if (contains? projectiles soldier)
-                                 (assoc-in soldier [:weapon :last-shot] (now))
+                                 (let [projectile-move-every
+                                         (get-in projectiles [soldier :move-every])
+                                       projectile-next-move (+ (now) projectile-move-every)
+                                       soldier-last-move (:last-move soldier)
+                                       soldier-next-move (+ soldier-last-move
+                                                            (:move-every soldier))]
+                                   (-> soldier
+                                       (assoc-in [:weapon :last-shot] (now))
+                                       (assoc :last-move
+                                         (if (> projectile-next-move soldier-next-move)
+                                           (let [new-soldier-last-move
+                                                 (+ soldier-last-move (- projectile-next-move
+                                                                         soldier-next-move))]
+                                             new-soldier-last-move)
+                                           soldier-last-move))))
                                  soldier)))))))
 
 (defn player-lost
@@ -477,11 +491,11 @@
     (step-restart-game state)
     (-> state
         (handle-switching)
-        (step-soldiers)
         (step-projectile-generation)
         (step-bomb-explosions)
         (step-projectile-movement)
         (step-projectile-collisions)
+        (step-soldiers)
         (step-loser))))
 
 (defn fill-block [screen color block]
