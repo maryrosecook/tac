@@ -329,10 +329,22 @@
       {:x 100 :y 40} {:x 100 :y 50} {:x 100 :y 60} {:x 100 :y 70} {:x 100 :y 80} {:x 100 :y 90}
       {:x 100 :y 100}
 
+      ;; top right barrier
+      {:x 400 :y 100} {:x 410 :y 100} {:x 420 :y 100} {:x 430 :y 100} {:x 440 :y 100}
+      {:x 450 :y 100}
+      {:x 390 :y 40} {:x 390 :y 50} {:x 390 :y 60} {:x 390 :y 70} {:x 390 :y 80} {:x 390 :y 90}
+      {:x 390 :y 100}
+
+      ;; bottom left barrier
+      {:x 40 :y 390} {:x 50 :y 390} {:x 60 :y 390} {:x 70 :y 390} {:x 80 :y 390} {:x 90 :y 390}
+      {:x 100 :y 390} {:x 100 :y 400} {:x 100 :y 410} {:x 100 :y 420} {:x 100 :y 430} {:x 100 :y 440}
+      {:x 100 :y 450}
+
       ;; bottom right barrier
       {:x 400 :y 400} {:x 410 :y 400} {:x 420 :y 400} {:x 430 :y 400} {:x 440 :y 400}
       {:x 450 :y 400}
-      {:x 400 :y 410} {:x 400 :y 420} {:x 400 :y 430} {:x 400 :y 440} {:x 400 :y 450}]
+      {:x 400 :y 410} {:x 400 :y 420} {:x 400 :y 430} {:x 400 :y 440} {:x 400 :y 450}
+      ]
 
      ;; border walls
      (map #(hash-map :x %          :y 0)          (range 0 (- d grid) grid))
@@ -379,7 +391,7 @@
 
 (defn make-game
   []
-  (let [player1-rifle-pos {:x 30 :y 30}
+  (let [player1-rifle-pos {:x 30 :y 430}
         player1-mortar-pos {:x 50 :y 50}
         player2-rifle-pos {:x (- level-dimensions 30) :y (- level-dimensions 30)}
         player2-mortar-pos {:x (- level-dimensions 50) :y (- level-dimensions 50)}]
