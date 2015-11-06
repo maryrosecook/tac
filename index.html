@@ -1,17 +1,29 @@
 <html>
   <style>
-    #screen1 {
-      float: left;
+    canvas {
+      padding-bottom: 5px;
     }
 
-    #screen2 {
+    .player1 {
+      float: left;
+      width:400px;
+    }
+
+    .player2 {
       float: right;
+      width: 400px;
     }
   </style>
 
   <body>
-    <canvas id="screen1" width="400" height="400"></canvas>
-    <canvas id="screen2" width="400" height="400"></canvas>
+    <div class="player1">
+      <canvas id="screen1" width="400" height="400"></canvas>
+      <img src="/images/player1controls.jpg" width="400">
+    </div>
+    <div class="player2">
+      <canvas id="screen2" width="400" height="400"></canvas>
+      <img src="/images/player2controls.jpg" width="400">
+    </div>
     <script type="text/javascript" src="out/main.js"></script>
   </body>
 </html>

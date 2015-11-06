@@ -396,8 +396,8 @@
                                   player1-mortar-pos
                                   "red"
                                   (make-weapon :mortar
-                                               {:x (+ (:x player1-mortar-pos) (* grid 2))
-                                                :y (+ (:y player1-mortar-pos) (* grid 2))}
+                                               {:x (+ (:x player1-mortar-pos) (* grid 7))
+                                                :y (+ (:y player1-mortar-pos) (* grid 7))}
                                                "rgba(255, 0, 0, 0.5)"))
                     (make-soldier :blue
                                   player2-rifle-pos
@@ -407,8 +407,8 @@
                                   player2-mortar-pos
                                   "blue"
                                   (make-weapon :mortar
-                                               {:x (- (:x player2-mortar-pos) (* grid 2))
-                                                :y (- (:y player2-mortar-pos) (* grid 2))}
+                                               {:x (- (:x player2-mortar-pos) (* grid 7))
+                                                :y (- (:y player2-mortar-pos) (* grid 7))}
                                                "rgba(0, 0, 255, 0.5)"))]
          :projectiles []
          :walls (make-walls)})))
