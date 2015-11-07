@@ -391,7 +391,7 @@
 
 (defn make-game
   []
-  (let [player1-rifle-pos {:x 30 :y 430}
+  (let [player1-rifle-pos {:x 30 :y 30}
         player1-mortar-pos {:x 50 :y 50}
         player2-rifle-pos {:x (- level-dimensions 30) :y (- level-dimensions 30)}
         player2-mortar-pos {:x (- level-dimensions 50) :y (- level-dimensions 50)}]
